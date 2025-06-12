@@ -21,6 +21,8 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 using TaleWorlds.MountAndBlade;
 
+using WarAndAiTweaks;
+
 namespace Diplomacy
 {
     public sealed class SubModule : MBSubModuleBase
@@ -104,6 +106,10 @@ namespace Diplomacy
                 gameStarter.AddBehavior(new ExpansionismBehavior());
                 gameStarter.AddBehavior(new CivilWarBehavior());
                 gameStarter.AddBehavior(new UIBehavior());
+
+                gameStarter.AddBehavior(new WarDesireBehavior());
+                gameStarter.AddBehavior(new PeaceDesireBehavior());
+                gameStarter.AddBehavior(new DiplomacyBehavior());
 
                 var currentKingdomDecisionPermissionModel = GetGameModel<KingdomDecisionPermissionModel>(gameStarterObject);
                 if (currentKingdomDecisionPermissionModel is null)

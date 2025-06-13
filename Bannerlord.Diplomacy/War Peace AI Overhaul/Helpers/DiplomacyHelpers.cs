@@ -1,9 +1,13 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using Diplomacy.CampaignBehaviors;
+using Diplomacy.Extensions;
+using TaleWorlds.Localization;
 
 namespace WarAndAiTweaks
 {
@@ -29,11 +33,24 @@ namespace WarAndAiTweaks
 
         public static bool AreNeighbors(Kingdom k1, Kingdom k2)
         {
-            var diplomacyBehavior = DiplomacyBehavior.Instance;
+            var diplomacyBehavior = Campaign.Current.GetCampaignBehavior<DiplomacyBehavior>();
             if (diplomacyBehavior == null) return false;
 
-            // FIX: The GetNeighborsOf method now returns a List<Kingdom>, so Contains() works correctly.
             return diplomacyBehavior.GetNeighborsOf(k1).Contains(k2);
+        }
+
+        /// <summary>
+        /// Calculates the effective military strength of a kingdom, including its allies.
+        /// </summary>
+        public static float GetEffectiveStrength(Kingdom kingdom)
+        {
+            float totalStrength = kingdom.TotalStrength;
+            // Add a portion of allied strength, as they may not fully commit.
+            foreach (var ally in kingdom.GetAlliedKingdoms())
+            {
+                totalStrength += ally.TotalStrength * 0.75f;
+            }
+            return totalStrength;
         }
 
         public static float CalculateEconomicBoost(Kingdom k, bool atWar)
@@ -60,10 +77,12 @@ namespace WarAndAiTweaks
         public static WarScoreBreakdown ComputeWarDesireScore(Kingdom us, Kingdom them)
         {
             var breakdown = new WarScoreBreakdown(them);
-            breakdown.ThreatScore = CalculateDangerScore(us, them);
 
-            float usStr = us.TotalStrength;
-            float themStr = them.TotalStrength;
+            // LOGIC CHANGE: Use effective strength (including allies) for calculations
+            float usStr = GetEffectiveStrength(us);
+            float themStr = GetEffectiveStrength(them);
+
+            breakdown.ThreatScore = (themStr / MathF.Max(1f, usStr)) * 50f + them.Settlements.Count * 2f;
             breakdown.PowerBalanceScore = (usStr - themStr) / (usStr + themStr + 1f);
             breakdown.MultiWarPenalty = MajorEnemies(us).Count() * 5f;
 
@@ -72,7 +91,7 @@ namespace WarAndAiTweaks
 
             var targetEnemies = MajorEnemies(them).ToList();
             var allKingdoms = MajorKingdoms().ToList();
-            float avgFiefs = allKingdoms.Any() ? (float)allKingdoms.Average(k => k.Settlements.Count) : 0f;
+            float avgFiefs = allKingdoms.Any() ? (float) allKingdoms.Average(k => k.Settlements.Count) : 0f;
             bool isTargetSnowballing = (them.TotalStrength > us.TotalStrength * 1.5f) && (them.Settlements.Count > avgFiefs * 1.5f);
 
             if (isTargetSnowballing && targetEnemies.Any())
@@ -90,7 +109,8 @@ namespace WarAndAiTweaks
         {
             var breakdown = new PeaceScoreBreakdown(them)
             {
-                DangerScore = CalculateDangerScore(us, them),
+                // LOGIC CHANGE: Use effective strength for danger calculation
+                DangerScore = (GetEffectiveStrength(them) / MathF.Max(1f, GetEffectiveStrength(us))) * 50f + them.Settlements.Count * 2f,
                 ExhaustionScore = usExhaustion
             };
 
@@ -99,14 +119,6 @@ namespace WarAndAiTweaks
             breakdown.TributeFactor = breakdown.TributeAmount * -0.01f;
             breakdown.FinalScore = breakdown.DangerScore + breakdown.ExhaustionScore + breakdown.TributeFactor;
             return breakdown;
-        }
-
-        public static float CalculateDangerScore(Kingdom us, Kingdom them)
-        {
-            // [REMOVED] GetEffectiveStrength which relied on alliances
-            float ourStr = us.TotalStrength;
-            float theirStr = them.TotalStrength;
-            return (theirStr / MathF.Max(1f, ourStr)) * 50f + them.Settlements.Count * 2f;
         }
         #endregion
 
@@ -118,7 +130,12 @@ namespace WarAndAiTweaks
             else if (breakdown.ThreatScore > 50f && breakdown.PowerBalanceScore < -0.2f) reasons.Add($"they view the superior strength of {breakdown.Target.Name} as an existential threat that must be confronted.");
             else if (breakdown.PowerBalanceScore > 0.3f) reasons.Add($"they believe {breakdown.Target.Name} is weak and ripe for conquest.");
             else reasons.Add("they consider it a moment of strategic opportunity.");
-            return $"{proposer.Name} has declared war on {breakdown.Target.Name}; our strategists believe {string.Join(" ", reasons)}";
+
+            var textObject = new TextObject("{=WAR_REASONING}{PROPOSER} has declared war on {TARGET}; our strategists believe {REASONS}");
+            textObject.SetTextVariable("PROPOSER", proposer.Name);
+            textObject.SetTextVariable("TARGET", breakdown.Target.Name);
+            textObject.SetTextVariable("REASONS", string.Join(" ", reasons));
+            return textObject.ToString();
         }
 
         public static string GeneratePeaceReasoning(Kingdom proposer, PeaceScoreBreakdown breakdown)
@@ -129,10 +146,13 @@ namespace WarAndAiTweaks
             else if (breakdown.DangerScore > breakdown.ExhaustionScore) reasons.Add($"they believe continuing the war against the might of {breakdown.Target.Name} is no longer sustainable.");
             else if (breakdown.TributeAmount > 100) reasons.Add("though costly, they believe paying tribute is necessary to end the war.");
             else reasons.Add("they have determined that the time is right to seek a cessation of hostilities.");
-            return $"{proposer.Name} has proposed peace with {breakdown.Target.Name}. Their envoys have indicated that {string.Join(" ", reasons)}";
+
+            var textObject = new TextObject("{=PEACE_REASONING}{PROPOSER} has proposed peace with {TARGET}. Their envoys have indicated that {REASONS}");
+            textObject.SetTextVariable("PROPOSER", proposer.Name);
+            textObject.SetTextVariable("TARGET", breakdown.Target.Name);
+            textObject.SetTextVariable("REASONS", string.Join(" ", reasons));
+            return textObject.ToString();
         }
         #endregion
-
-        // [REMOVED] Pact & Alliance Evaluation region
     }
 }

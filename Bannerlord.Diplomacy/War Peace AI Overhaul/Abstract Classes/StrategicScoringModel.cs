@@ -50,6 +50,7 @@ namespace WarAndAiTweaks
         /// <returns>True if the score meets the threshold, false otherwise.</returns>
         public bool ShouldTakeAction(Kingdom proposingKingdom, Kingdom otherKingdom)
         {
+            //InformationManager.DisplayMessage(new InformationMessage("The score for forming a non-aggression pact from: " + proposingKingdom.Name + " to " + otherKingdom.Name + " was: " + GetScore(proposingKingdom, otherKingdom).ResultNumber));
             return GetScore(proposingKingdom, otherKingdom).ResultNumber >= ScoreThreshold;
         }
 

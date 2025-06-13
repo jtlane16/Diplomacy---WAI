@@ -1,13 +1,16 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.MapNotificationTypes;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
-using TaleWorlds.CampaignSystem.MapNotificationTypes;
 using TaleWorlds.Localization;
-using System;
 using TaleWorlds.SaveSystem;
+
+using static Diplomacy.WarExhaustion.WarExhaustionManager;
 
 namespace WarAndAiTweaks
 {
@@ -33,6 +36,9 @@ namespace WarAndAiTweaks
 
         public static DiplomacyBehavior Instance { get; private set; }
 
+        [SaveableField(3)] // Make sure this number is unique within the class
+        private Dictionary<string, int> _daysAtPeace = new Dictionary<string, int>();
+
         // FIX: The cache is now a simple list of our saveable class.
         private List<NeighborCacheEntry> _neighborCache = new List<NeighborCacheEntry>();
 
@@ -54,6 +60,7 @@ namespace WarAndAiTweaks
         {
             // The list of our custom class is now safe to sync.
             dataStore.SyncData("_neighborCache", ref _neighborCache);
+            dataStore.SyncData("_daysAtPeace", ref _daysAtPeace);
         }
 
         // This is a required definition for the save system to recognize our custom class.
@@ -77,6 +84,27 @@ namespace WarAndAiTweaks
         private void DailyTick()
         {
             UpdateNeighborCache();
+
+            foreach (var kingdom in Kingdom.All.Where(k => !k.IsMinorFaction && !k.IsEliminated))
+            {
+                // If the kingdom has no enemies, increment its peace counter.
+                if (!FactionManager.GetEnemyKingdoms(kingdom).Any())
+                {
+                    if (_daysAtPeace.ContainsKey(kingdom.StringId))
+                    {
+                        _daysAtPeace[kingdom.StringId]++;
+                    }
+                    else
+                    {
+                        _daysAtPeace[kingdom.StringId] = 1;
+                    }
+                }
+                else
+                {
+                    // If at war, reset the counter.
+                    _daysAtPeace[kingdom.StringId] = 0;
+                }
+            }
         }
 
         private void UpdateNeighborCache()
@@ -87,6 +115,7 @@ namespace WarAndAiTweaks
 
             // Use a temporary set to avoid adding duplicate pairs (e.g., K1-K2 and K2-K1)
             var processedPairs = new HashSet<Tuple<string, string>>();
+
 
             foreach (var k1 in kingdoms)
             {
@@ -115,6 +144,12 @@ namespace WarAndAiTweaks
                     processedPairs.Add(pair);
                 }
             }
+        }
+
+        // Add a public method to get the days at peace
+        public int GetDaysAtPeace(Kingdom kingdom)
+        {
+            return _daysAtPeace.TryGetValue(kingdom.StringId, out var days) ? days : 0;
         }
 
         // FIX: This method is updated to query the new list-based cache.

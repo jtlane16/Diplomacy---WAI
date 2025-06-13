@@ -22,6 +22,7 @@ namespace WarAndAiTweaks
     {
         public Kingdom Target { get; }
         public float FinalScore { get; set; }
+        public float ConquestScore { get; set; }
         public float ThreatScore { get; set; }
         public float PowerBalanceScore { get; set; }
         public float MultiWarPenalty { get; set; }
@@ -201,11 +202,6 @@ namespace WarAndAiTweaks
             foreach (var target in potentialTargets)
             {
                 var breakdown = DiplomacyHelpers.ComputeWarDesireScore(us, target);
-                float warThreshold = 60f - (us.Leader?.GetTraitLevel(DefaultTraits.Valor) * 15f ?? 0f);
-
-                // Log every single evaluation
-                DiplomacyLogHelper.LogWarEvaluation(us, breakdown, warThreshold);
-
                 if (breakdown.FinalScore > bestScore)
                 {
                     bestScore = breakdown.FinalScore;
@@ -213,7 +209,23 @@ namespace WarAndAiTweaks
                 }
             }
 
-            float finalWarThreshold = 60f - (us.Leader?.GetTraitLevel(DefaultTraits.Valor) * 15f ?? 0f);
+            // NEW: Calculate War Urgency
+            int daysAtPeace = DiplomacyBehavior.Instance.GetDaysAtPeace(us);
+            // Lower the threshold by 1 for each day at peace, capping at 30 days.
+            float urgencyDiscount = Math.Min(daysAtPeace, 30);
+
+            // Original Threshold
+            float baseWarThreshold = 60f - (us.Leader?.GetTraitLevel(DefaultTraits.Valor) * 15f ?? 0f);
+
+            // Modified Threshold
+            float finalWarThreshold = baseWarThreshold - urgencyDiscount;
+
+            // Log the evaluation with the new threshold
+            if (bestTargetBreakdown != null)
+            {
+                // Make sure to pass the 'urgencyDiscount' to the logging function
+                DiplomacyLogHelper.LogWarEvaluation(us, bestTargetBreakdown, finalWarThreshold, urgencyDiscount);
+            }
 
             if (bestTargetBreakdown != null && bestScore > finalWarThreshold)
             {

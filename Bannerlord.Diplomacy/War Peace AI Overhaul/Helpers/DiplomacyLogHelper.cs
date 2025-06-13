@@ -36,7 +36,7 @@ namespace WarAndAiTweaks
         /// <summary>
         /// Logs a detailed breakdown of a kingdom's evaluation for declaring war against a target.
         /// </summary>
-        public static void LogWarEvaluation(Kingdom us, WarScoreBreakdown breakdown, float warThreshold)
+        public static void LogWarEvaluation(Kingdom us, WarScoreBreakdown breakdown, float warThreshold, float urgencyDiscount)
         {
             var sb = new StringBuilder();
             sb.AppendLine();
@@ -44,13 +44,14 @@ namespace WarAndAiTweaks
             sb.AppendLine($"Evaluating: {us.Name} -> {breakdown.Target.Name}");
             sb.AppendLine($"Stance: {us.GetStanceWith(breakdown.Target).GetStanceName()}");
             sb.AppendLine($"---");
-            sb.AppendLine($"Final Score: {breakdown.FinalScore:F2} / {warThreshold:F2} -> {(breakdown.FinalScore > warThreshold ? "Considering War" : "Not Considering War")}");
+            sb.AppendLine($"Final Score: {breakdown.FinalScore:F2} / {warThreshold:F2} (Base: {warThreshold + urgencyDiscount:F2}, Urgency: -{urgencyDiscount:F2}) -> {(breakdown.FinalScore > warThreshold ? "Considering War" : "Not Considering War")}");
             sb.AppendLine($"--- Breakdown ---");
             sb.AppendLine($"Threat Score: {breakdown.ThreatScore:F2}");
             sb.AppendLine($"Power Balance Score: {breakdown.PowerBalanceScore:F2}");
             sb.AppendLine($"Existing Wars Penalty: {breakdown.MultiWarPenalty:F2}");
             sb.AppendLine($"Distance Penalty: {breakdown.DistancePenalty:F2}");
             sb.AppendLine($"Dogpile Bonus: {breakdown.DogpileBonus:F2}");
+            sb.AppendLine($"Conquest Score: {breakdown.ConquestScore:F2}"); // NEW
             sb.AppendLine("=======================================");
             _logger.LogInformation(sb.ToString());
         }

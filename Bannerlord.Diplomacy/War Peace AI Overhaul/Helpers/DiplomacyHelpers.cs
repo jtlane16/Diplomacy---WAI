@@ -83,6 +83,40 @@ namespace WarAndAiTweaks
             return ownStrength + alliesStrength;
         }
 
+        public static float GetConquestScore(Kingdom us, Kingdom them)
+        {
+            float conquestScore = 0;
+
+            // 1. Prioritize weaker neighbors
+            if (AreNeighbors(us, them))
+            {
+                float powerRatio = them.TotalStrength / Math.Max(1f, us.TotalStrength);
+                if (powerRatio < 0.8f) // If they are significantly weaker
+                {
+                    // Add a score bonus based on how much weaker they are.
+                    // A very weak neighbor is a very tempting target.
+                    conquestScore += (1 - powerRatio) * 50f;
+                }
+            }
+
+            // 2. Incentive to eliminate a faction
+            // If a kingdom has few fiefs, they are close to elimination.
+            if (them.Fiefs.Count() <= 2 && them.Fiefs.Count() > 0)
+            {
+                conquestScore += 40f; // Strong bonus to finish them off
+            }
+
+            // 3. Reclaim cultural lands
+            // Bonus for attacking a kingdom that holds fiefs of our culture.
+            int reclaimableFiefs = them.Fiefs.Count(f => f.Culture == us.Culture);
+            if (reclaimableFiefs > 0)
+            {
+                conquestScore += reclaimableFiefs * 15f;
+            }
+
+            return conquestScore;
+        }
+
         public static WarScoreBreakdown ComputeWarDesireScore(Kingdom us, Kingdom them)
         {
             var breakdown = new WarScoreBreakdown(them);
@@ -144,6 +178,9 @@ namespace WarAndAiTweaks
             float targetEconomicValue = CalculateEconomicBoost(them, false) * 25f;
             breakdown.FinalScore += targetEconomicValue;
 
+            breakdown.ConquestScore = GetConquestScore(us, them);
+            breakdown.FinalScore += breakdown.ConquestScore;
+
             return breakdown;
         }
 
@@ -164,19 +201,37 @@ namespace WarAndAiTweaks
         #endregion
 
         #region Reasoning Generators
-        public static string GenerateWarReasoning(Kingdom proposer, WarScoreBreakdown breakdown)
+        public static string GenerateWarReasoning(Kingdom us, WarScoreBreakdown breakdown)
         {
-            var reasons = new List<string>();
-            if (breakdown.DogpileBonus > 30f) reasons.Add("they see an opportunity to cull the power of a growing empire while it is distracted by other wars.");
-            else if (breakdown.ThreatScore > 50f && breakdown.PowerBalanceScore < -0.2f) reasons.Add($"they view the superior strength of {breakdown.Target.Name} as an existential threat that must be confronted.");
-            else if (breakdown.PowerBalanceScore > 0.3f) reasons.Add($"they believe {breakdown.Target.Name} is weak and ripe for conquest.");
-            else reasons.Add("they consider it a moment of strategic opportunity.");
+            // Determine the primary driver for the war based on which score component was the highest
+            var scores = new Dictionary<string, float>
+            {
+                { "Conquest", breakdown.ConquestScore },
+                { "Threat", breakdown.ThreatScore },
+                { "Dogpile", breakdown.DogpileBonus }
+            };
 
-            var textObject = new TextObject("{=WAR_REASONING}{PROPOSER} has declared war on {TARGET}; our strategists believe {REASONS}");
-            textObject.SetTextVariable("PROPOSER", proposer.Name);
-            textObject.SetTextVariable("TARGET", breakdown.Target.Name);
-            textObject.SetTextVariable("REASONS", string.Join(" ", reasons));
-            return textObject.ToString();
+            var primaryReason = scores.OrderByDescending(kv => kv.Value).First().Key;
+
+            TextObject reasonText;
+
+            switch (primaryReason)
+            {
+                case "Conquest":
+                    reasonText = new TextObject("{=war_reason_conquest}Driven by ambition, {KINGDOM_NAME} sees {ENEMY_NAME} as a prime target for expansion and has declared war!");
+                    break;
+                case "Dogpile":
+                    reasonText = new TextObject("{=war_reason_dogpile}Seeing that {ENEMY_NAME} is embroiled in other conflicts, {KINGDOM_NAME} has declared war, hoping to capitalize on their distraction.");
+                    break;
+                case "Threat":
+                default:
+                    reasonText = new TextObject("{=war_reason_threat}Feeling threatened by the growing power of {ENEMY_NAME}, {KINGDOM_NAME} has launched a preventative war to curb their influence.");
+                    break;
+            }
+
+            reasonText.SetTextVariable("KINGDOM_NAME", us.Name);
+            reasonText.SetTextVariable("ENEMY_NAME", breakdown.Target.Name);
+            return reasonText.ToString();
         }
 
         public static string GeneratePeaceReasoning(Kingdom proposer, PeaceScoreBreakdown breakdown)

@@ -5,15 +5,19 @@ using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using Diplomacy.WarExhaustion;
+using Diplomacy.DiplomaticAction.WarPeace;
+using TaleWorlds.Localization;
 
 namespace WarAndAiTweaks
 {
-    #region Data Structures
+    #region Data Structures (No Change)
     public class WarScoreBreakdown
     {
         public Kingdom Target { get; }
@@ -38,233 +42,200 @@ namespace WarAndAiTweaks
     }
     #endregion
 
-    public class WarDesireBehavior : CampaignBehaviorBase
+    /// <summary>
+    /// This new unified behavior manages a kingdom's strategic decisions for both war and peace,
+    /// making the AI more proactive and goal-oriented.
+    /// </summary>
+    public class StrategicAIBehavior : CampaignBehaviorBase
     {
-        #region Fields & Constants
-        private const float DESIRE_GAIN_AT_PEACE = 0.6f;
-        private const float DESIRE_LOSS_AT_WAR = -1f;
-        private const float EXH_GAIN_AT_WAR = 1f;
-        private const float EXH_DECAY_AT_PEACE = -0.5f;
+        // How often, in days, a kingdom will evaluate its diplomatic situation.
+        private const int DIPLOMACY_EVALUATION_COOLDOWN_DAYS = 3;
+        private Dictionary<string, CampaignTime> _lastDiplomaticEvaluation;
 
-        private Dictionary<string, float> _desire = new Dictionary<string, float>();
-        private Dictionary<string, float> _bias = new Dictionary<string, float>();
-        private Dictionary<string, int> _period = new Dictionary<string, int>();
-        private Dictionary<string, int> _timer = new Dictionary<string, int>();
-        private Dictionary<string, Dictionary<string, float>> _perWarExh = new Dictionary<string, Dictionary<string, float>>();
-        private int _daysEveryoneAtPeace = 0;
-        #endregion
+        public StrategicAIBehavior()
+        {
+            _lastDiplomaticEvaluation = new Dictionary<string, CampaignTime>();
+        }
 
-        #region Core Loop & Events
         public override void RegisterEvents()
         {
             CampaignEvents.DailyTickClanEvent.AddNonSerializedListener(this, DailyClanTick);
-            CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, DailyGlobalTick);
-            CampaignEvents.OnSettlementOwnerChangedEvent.AddNonSerializedListener(this, OnFiefSwing);
-            CampaignEvents.WarDeclared.AddNonSerializedListener(this, OnWarDeclared);
         }
 
         public override void SyncData(IDataStore store)
         {
-            store.SyncData("_desire", ref _desire);
-            store.SyncData("_bias", ref _bias);
-            store.SyncData("_period", ref _period);
-            store.SyncData("_timer", ref _timer);
-            store.SyncData("_perWarExh", ref _perWarExh);
-            store.SyncData("_daysEveryoneAtPeace", ref _daysEveryoneAtPeace);
+            store.SyncData("_lastDiplomaticEvaluation", ref _lastDiplomaticEvaluation);
         }
 
         private void DailyClanTick(Clan clan)
         {
-            if (clan == Clan.PlayerClan || clan.Kingdom == null || clan.Kingdom.RulingClan != clan) return;
-            if (clan.Kingdom.UnresolvedDecisions.Any(d => d is DeclareWarDecision || d is MakePeaceKingdomDecision)) return;
+            // AI logic only runs for kingdom rulers who are not the player.
+            if (clan.Kingdom?.Leader != clan.Leader || clan.Leader.IsHumanPlayerCharacter)
+            {
+                return;
+            }
 
             var kingdom = clan.Kingdom;
-            string id = kingdom.StringId;
-            Ensure(id);
 
-            bool atWar = DiplomacyHelpers.MajorEnemies(kingdom).Any();
-            UpdateWarExhaustion(kingdom, id, atWar);
-            UpdateWarDesireAndTimer(kingdom, id, atWar);
-
-            float avgExhaustion = ComputeAverageExhaustion(kingdom, id);
-            PeaceDesireBehavior.SetExhaustion(id, avgExhaustion);
-
-            TryDeclareWar(kingdom);
-        }
-
-        private void DailyGlobalTick()
-        {
-            bool anyWar = DiplomacyHelpers.MajorKingdoms().Any(a => DiplomacyHelpers.MajorEnemies(a).Any());
-            _daysEveryoneAtPeace = anyWar ? 0 : _daysEveryoneAtPeace + 1;
-        }
-
-        private void OnFiefSwing(Settlement s, bool _, Hero newOwner, Hero oldOwner, Hero __, ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail ____)
-        {
-            Kingdom winner = newOwner?.Clan?.Kingdom, loser = oldOwner?.Clan?.Kingdom;
-            if (winner == null || loser == null || winner == loser) return;
-            Bump(winner.StringId, +2f);
-            PeaceDesireBehavior.BumpDesire(loser.StringId, +8f);
-        }
-
-        private void OnWarDeclared(IFaction a, IFaction b, DeclareWarAction.DeclareWarDetail _)
-        {
-            if (!(a is Kingdom k1) || !(b is Kingdom k2)) return;
-            _daysEveryoneAtPeace = 0;
-            Ensure(k1.StringId);
-            Ensure(k2.StringId);
-            _desire[k1.StringId] = 0f;
-            _desire[k2.StringId] = 0f;
-            if (!_perWarExh[k1.StringId].ContainsKey(k2.StringId)) _perWarExh[k1.StringId][k2.StringId] = 0f;
-            if (!_perWarExh[k2.StringId].ContainsKey(k1.StringId)) _perWarExh[k2.StringId][k1.StringId] = 0f;
-            _perWarExh[k1.StringId][k2.StringId] = 5f;
-            _perWarExh[k2.StringId][k1.StringId] = 5f;
-            PeaceDesireBehavior.NotifyWarStarted(k1.StringId);
-            PeaceDesireBehavior.NotifyWarStarted(k2.StringId);
-        }
-        #endregion
-
-        #region AI Action Triggers
-        private void TryDeclareWar(Kingdom k)
-        {
-            string id = k.StringId;
-            float threshold = DiplomacyHelpers.ComputeDynamicWarThreshold(k);
-            if (_timer[id] < _period[id] || _desire[id] < threshold) return;
-
-            _timer[id] = 0;
-            _period[id] = MBRandom.RandomInt(5, 10);
-
-            var candidates = DiplomacyHelpers.MajorKingdoms().Where(o => o != k && !DiplomacyHelpers.MajorEnemies(k).Contains(o));
-            var scored = candidates.Select(o => DiplomacyHelpers.ComputeWarDesireScore(k, o)).Where(x => x.FinalScore > threshold).OrderByDescending(x => x.FinalScore).ToList();
-
-            if (scored.Any())
+            // Check if it's time to evaluate diplomacy for this kingdom
+            if (!_lastDiplomaticEvaluation.TryGetValue(kingdom.StringId, out var lastEvaluationTime)
+                || (CampaignTime.Now - lastEvaluationTime).ToDays > DIPLOMACY_EVALUATION_COOLDOWN_DAYS)
             {
-                var winningChoice = scored.First();
-                string reason = DiplomacyHelpers.GenerateWarReasoning(k, winningChoice);
+                // First, check if peace should be made in any ongoing wars.
+                if (ConsiderMakingPeace(kingdom))
+                {
+                    // If a peace deal was made or proposed, stop further diplomatic actions for this cycle.
+                    _lastDiplomaticEvaluation[kingdom.StringId] = CampaignTime.Now;
+                    return;
+                }
+
+                // If not making peace, consider declaring a new war.
+                ConsiderDeclaringWar(kingdom);
+
+                // Update the last evaluation time to now
+                _lastDiplomaticEvaluation[kingdom.StringId] = CampaignTime.Now;
+            }
+        }
+
+        /// <summary>
+        /// AI evaluates if it should sue for peace in any of its current wars.
+        /// </summary>
+        /// <returns>True if a peace action was taken or proposed, false otherwise.</returns>
+        private bool ConsiderMakingPeace(Kingdom us)
+        {
+            var enemies = DiplomacyHelpers.MajorEnemies(us).ToList();
+            if (!enemies.Any()) return false;
+
+            foreach (var enemy in enemies)
+            {
+                if (WantsPeace(us, enemy))
+                {
+                    // If the enemy is the player, propose peace via an inquiry.
+                    if (enemy.Leader.IsHumanPlayerCharacter)
+                    {
+                        KingdomPeaceAction.ApplyPeace(us, enemy);
+                        return true; // A peace proposal was sent.
+                    }
+                    // If the enemy is another AI, check if they also want peace.
+                    else if (WantsPeace(enemy, us))
+                    {
+                        // Both sides agree, so make peace directly without a vote.
+                        MakePeaceAction.Apply(us, enemy);
+                        return true; // Peace was made.
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Determines if a kingdom has sufficient desire to make peace with another.
+        /// </summary>
+        /// <param name="us">The kingdom evaluating peace.</param>
+        /// <param name="them">The enemy kingdom.</param>
+        /// <returns>True if the kingdom wants peace, false otherwise.</returns>
+        private bool WantsPeace(Kingdom us, Kingdom them)
+        {
+            bool desperateForPeace = false;
+            float warProgress = GetWarProgress(us, them);
+            float exhaustion = WarExhaustionManager.Instance?.GetWarExhaustion(us, them) ?? 0f;
+
+            // If war is going badly or exhaustion is critical, become desperate.
+            if (warProgress < -30 || exhaustion > 80)
+            {
+                desperateForPeace = true;
+            }
+
+            // An honorable leader is more likely to accept a stalemate peace.
+            float personalityModifier = us.Leader.GetTraitLevel(DefaultTraits.Honor) * 10f;
+
+            // Calculate the desire for peace
+            float peaceDesire = -warProgress + exhaustion + personalityModifier;
+
+            // If desperate, AI will sue for peace regardless of other factors. Otherwise, requires a higher desire.
+            float peaceThreshold = desperateForPeace ? 40f : 70f;
+
+            return peaceDesire > peaceThreshold;
+        }
+
+        /// <summary>
+        /// AI evaluates potential targets and decides if a new war is strategically advantageous.
+        /// </summary>
+        private void ConsiderDeclaringWar(Kingdom us)
+        {
+            // Don't start new wars if already in a difficult position.
+            if (DiplomacyHelpers.MajorEnemies(us).Count() > 1) return;
+
+            var potentialTargets = DiplomacyHelpers.MajorKingdoms()
+                .Where(them => them != us && !FactionManager.IsAtWarAgainstFaction(us, them) && !FactionManager.IsAlliedWithFaction(us, them))
+                .ToList();
+
+            if (!potentialTargets.Any()) return;
+
+            WarScoreBreakdown? bestTarget = null;
+            float bestScore = float.MinValue;
+
+            foreach (var target in potentialTargets)
+            {
+                var breakdown = DiplomacyHelpers.ComputeWarDesireScore(us, target);
+                if (breakdown.FinalScore > bestScore)
+                {
+                    bestScore = breakdown.FinalScore;
+                    bestTarget = breakdown;
+                }
+            }
+
+            // Warlike leaders are more likely to pull the trigger.
+            float warThreshold = 60f - (us.Leader.GetTraitLevel(DefaultTraits.Valor) * 15f);
+
+            if (bestTarget != null && bestScore > warThreshold)
+            {
+                string reason = DiplomacyHelpers.GenerateWarReasoning(us, bestTarget);
                 InformationManager.DisplayMessage(new InformationMessage(reason, Colors.Red));
-                DeclareWarAction.ApplyByDefault(k, winningChoice.Target);
-            }
-        }
-        #endregion
-
-        #region Internal State Management
-        private void Ensure(string id)
-        {
-            if (!_desire.ContainsKey(id)) _desire[id] = MBRandom.RandomFloatRanged(0f, DiplomacyHelpers.ComputeDynamicWarThreshold(Kingdom.All.First(k => k.StringId == id)) * 0.4f);
-            if (!_bias.ContainsKey(id)) _bias[id] = MBRandom.RandomFloatRanged(0.8f, 1.2f);
-            if (!_period.ContainsKey(id)) _period[id] = MBRandom.RandomInt(5, 10);
-            if (!_timer.ContainsKey(id)) _timer[id] = MBRandom.RandomInt(0, _period[id]);
-            if (!_perWarExh.ContainsKey(id)) _perWarExh[id] = new Dictionary<string, float>();
-        }
-
-        private void UpdateWarDesireAndTimer(Kingdom k, string id, bool atWar)
-        {
-            float delta = (atWar ? DESIRE_LOSS_AT_WAR : DESIRE_GAIN_AT_PEACE) * _bias[id] + DiplomacyHelpers.CalculateEconomicBoost(k, atWar) + MBRandom.RandomFloatRanged(-0.1f, 0.1f);
-            _desire[id] = MBMath.ClampFloat(_desire[id] + delta, 0f, 100f);
-            _timer[id]++;
-        }
-
-        private void UpdateWarExhaustion(Kingdom k, string id, bool atWar)
-        {
-            if (!_perWarExh.TryGetValue(id, out var exhaustionDict))
-            {
-                exhaustionDict = new Dictionary<string, float>();
-                _perWarExh[id] = exhaustionDict;
-            }
-
-            var relevantKingdoms = DiplomacyHelpers.MajorKingdoms().Where(other => other != k && (DiplomacyHelpers.MajorEnemies(k).Contains(other) || DiplomacyHelpers.AreNeighbors(k, other)));
-            foreach (var other in relevantKingdoms)
-            {
-                exhaustionDict.TryGetValue(other.StringId, out float currentExhaustion);
-                float delta = DiplomacyHelpers.MajorEnemies(k).Contains(other) ? EXH_GAIN_AT_WAR : EXH_DECAY_AT_PEACE;
-                exhaustionDict[other.StringId] = MBMath.ClampFloat(currentExhaustion + delta, 0f, 100f);
+                DeclareWarAction.ApplyByDefault(us, bestTarget.Target);
             }
         }
 
-        private float ComputeAverageExhaustion(Kingdom k, string id) => DiplomacyHelpers.MajorEnemies(k).Select(o => _perWarExh[id].TryGetValue(o.StringId, out var ex) ? ex : 0f).DefaultIfEmpty(0f).Average();
-        private void Bump(string id, float delta) { if (_desire.ContainsKey(id)) _desire[id] = MBMath.ClampFloat(_desire[id] + delta, 0f, 100f); }
-        public float GetExhaustionForWar(Kingdom k1, Kingdom k2) => _perWarExh.TryGetValue(k1.StringId, out var d) && d.TryGetValue(k2.StringId, out float e) ? e : 0f;
-        #endregion
+        /// <summary>
+        /// A simple metric to determine how a war is going.
+        /// Positive score means 'us' is winning, negative means 'them' is winning.
+        /// </summary>
+        private float GetWarProgress(Kingdom us, Kingdom them)
+        {
+            float ourCasualties = us.GetStanceWith(them).GetCasualties(us);
+            float theirCasualties = them.GetStanceWith(us).GetCasualties(them);
+
+            float casualtyScore = (theirCasualties - ourCasualties) / Math.Max(1f, theirCasualties + ourCasualties) * 50f;
+
+            float ourFiefsLost = us.GetStanceWith(them).GetSuccessfulSieges(us);
+            float theirFiefsLost = them.GetStanceWith(us).GetSuccessfulSieges(them);
+
+            float fiefScore = (theirFiefsLost - ourFiefsLost) * 20f;
+
+            return casualtyScore + fiefScore;
+        }
     }
 
+    #region Old Behaviors (To be removed/replaced)
+    // The old WarDesireBehavior and PeaceDesireBehavior should be removed from SubModule.cs
+    // and replaced with the new StrategicAIBehavior.
+    public class WarDesireBehavior : CampaignBehaviorBase
+    {
+        public override void RegisterEvents() { }
+        public override void SyncData(IDataStore s) { }
+    }
     public class PeaceDesireBehavior : CampaignBehaviorBase
     {
-        #region Fields & Constants
-        private const float BASE_GROWTH = 0.5f, EXH_BOOST = 0.2f, THRESHOLD_BASE = 55f, THRESHOLD_PER_ENEMY = 5f, THRESHOLD_MIN = 30f;
-        private static readonly Dictionary<string, float> _externExh = new Dictionary<string, float>();
-        private Dictionary<string, float> _desire = new Dictionary<string, float>();
-        private Dictionary<string, int> _period = new Dictionary<string, int>(), _timer = new Dictionary<string, int>();
-        private static PeaceDesireBehavior _inst;
-        #endregion
-
-        public PeaceDesireBehavior() { _inst = this; }
-
-        #region Core Loop & Events
-        public override void RegisterEvents() { CampaignEvents.DailyTickClanEvent.AddNonSerializedListener(this, DailyClanTick); }
-        public override void SyncData(IDataStore s) { s.SyncData("_desire", ref _desire); s.SyncData("_period", ref _period); s.SyncData("_timer", ref _timer); }
-
-        private void DailyClanTick(Clan clan)
-        {
-            if (clan.Kingdom == null || clan.Kingdom.RulingClan != clan || clan == Clan.PlayerClan) return;
-            var us = clan.Kingdom;
-            var enemies = DiplomacyHelpers.MajorEnemies(us).ToList();
-            if (!enemies.Any()) { if (_desire.ContainsKey(us.StringId)) { _desire[us.StringId] = Math.Max(0f, _desire[us.StringId] - 1f); } return; }
-            if (us.UnresolvedDecisions.Any(d => d is MakePeaceKingdomDecision)) return;
-
-            Ensure(us.StringId);
-            UpdatePeaceDesire(us, enemies);
-
-            if (_timer[us.StringId] < _period[us.StringId] || _desire[us.StringId] < GetPeaceThreshold(us)) return;
-
-            _timer[us.StringId] = 0;
-            _period[us.StringId] = MBRandom.RandomInt(5, 10);
-
-            var warDesireBehavior = Campaign.Current.GetCampaignBehavior<WarDesireBehavior>();
-            if (warDesireBehavior == null) return;
-
-            var scoredPeaceCandidates = enemies.Select(e => DiplomacyHelpers.ComputePeaceScore(us, e, warDesireBehavior.GetExhaustionForWar(us, e))).OrderByDescending(s => s.FinalScore).ToList();
-            if (!scoredPeaceCandidates.Any()) return;
-
-            var winningChoice = scoredPeaceCandidates.First();
-            string reason = DiplomacyHelpers.GeneratePeaceReasoning(us, winningChoice);
-            InformationManager.DisplayMessage(new InformationMessage(reason, Colors.Green));
-
-            // [REMOVED] Inquiry for player. Now directly applies peace.
-            MakePeaceAction.ApplyByKingdomDecision(us, winningChoice.Target, winningChoice.TributeAmount);
-
-            _desire[us.StringId] *= (1.0f - (1.0f / (enemies.Count + 1.0f)));
-        }
-        #endregion
-
-        #region Public API & State Accessors
-        public static void NotifyWarStarted(string id) { if (_inst == null) return; _inst.Ensure(id); _inst._timer[id] = 0; _inst._period[id] = MBRandom.RandomInt(5, 10); _inst._desire[id] = 0f; }
-        public static void SetExhaustion(string kid, float v) => _externExh[kid] = v;
-        public static void BumpDesire(string kid, float d) { if (_inst?._desire.ContainsKey(kid) ?? false) _inst._desire[kid] = MBMath.ClampFloat(_inst._desire[kid] + d, 0f, 100f); }
-        public bool IsPeaceProposalAcceptable(Kingdom recipient, Kingdom proposer)
-        {
-            if (recipient == null || proposer == null || !FactionManager.IsAtWarAgainstFaction(recipient, proposer)) return false;
-            Ensure(recipient.StringId);
-            return _desire[recipient.StringId] >= GetPeaceThreshold(recipient);
-        }
-        #endregion
-
-        #region Internal State Management
-        private void Ensure(string id) { if (!_desire.ContainsKey(id)) _desire[id] = MBRandom.RandomFloatRanged(0f, THRESHOLD_BASE * 0.4f); if (!_period.ContainsKey(id)) _period[id] = MBRandom.RandomInt(5, 10); if (!_timer.ContainsKey(id)) _timer[id] = MBRandom.RandomInt(0, _period[id]); }
-        private float GetPeaceThreshold(Kingdom k) => Math.Max(THRESHOLD_BASE - (DiplomacyHelpers.MajorEnemies(k).Count() - 1) * THRESHOLD_PER_ENEMY, THRESHOLD_MIN);
-
-        private void UpdatePeaceDesire(Kingdom us, List<Kingdom> enemies)
-        {
-            string id = us.StringId;
-            float exhaustion = _externExh.TryGetValue(id, out var exh) ? exh : 0f;
-            float delta = (BASE_GROWTH * (float)Math.Pow(1.5, enemies.Count - 1)) + (exhaustion / 100f * EXH_BOOST);
-
-            // [REMOVED] Alliance strength calculation
-            _desire[id] = MBMath.ClampFloat(_desire[id] + delta, 0f, 100f);
-            _timer[id]++;
-        }
-        #endregion
+        public override void RegisterEvents() { }
+        public override void SyncData(IDataStore s) { }
+        public static void NotifyWarStarted(string id) { }
+        public static void SetExhaustion(string kid, float v) { }
+        public static void BumpDesire(string kid, float d) { }
+        public bool IsPeaceProposalAcceptable(Kingdom r, Kingdom p) => true;
     }
+    #endregion
 
-    #region Harmony Patches
+    #region Harmony Patches (No Change)
     [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomWarDecision")]
     public static class Patch_DisableRandomWar { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
 
@@ -276,15 +247,8 @@ namespace WarAndAiTweaks
     {
         public static bool Prefix(KingdomWarItemVM item)
         {
-            var peaceBehavior = Campaign.Current.GetCampaignBehavior<PeaceDesireBehavior>();
-            if (peaceBehavior == null) return true;
-            var playerKingdom = Hero.MainHero.Clan.Kingdom;
-            var targetKingdom = item.Faction2 as Kingdom;
-            if (playerKingdom == null || targetKingdom == null) return true;
-            if (peaceBehavior.IsPeaceProposalAcceptable(targetKingdom, playerKingdom)) return true;
-
-            InformationManager.DisplayMessage(new InformationMessage($"{targetKingdom.Name} is not interested in peace at this time.", Colors.Red));
-            return false;
+            // Kept for player-initiated peace, but AI logic is now separate.
+            return true;
         }
     }
     #endregion

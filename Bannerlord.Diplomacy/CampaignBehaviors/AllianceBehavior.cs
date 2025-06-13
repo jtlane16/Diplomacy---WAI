@@ -119,8 +119,14 @@ namespace Diplomacy.CampaignBehaviors
                 .ToList();
 
             foreach (var potentialAlly in potentialAllies)
+            {
                 if (new WarAndAiTweaks.AllianceScoringModel().ShouldTakeActionBidirectional(kingdom, potentialAlly))
+                {
                     DeclareAllianceAction.Apply(kingdom, potentialAlly);
+                    // After forming one alliance, the kingdom should re-evaluate its position later.
+                    return;
+                }
+            }
         }
 
         private static void ConsiderBreakingAlliances(Kingdom kingdom)
@@ -131,11 +137,12 @@ namespace Diplomacy.CampaignBehaviors
 
             foreach (var alliedKingdom in alliedKingdoms)
             {
-                if (MBRandom.RandomFloat < 0.05f
-                    && BreakAllianceConditions.Instance.CanApply(kingdom, alliedKingdom)
+                if (BreakAllianceConditions.Instance.CanApply(kingdom, alliedKingdom)
                     && new WarAndAiTweaks.BreakAllianceScoringModel().ShouldTakeAction(kingdom, alliedKingdom))
                 {
                     BreakAllianceAction.Apply(kingdom, alliedKingdom);
+                    // After breaking an alliance, the kingdom should re-evaluate its position later.
+                    return;
                 }
             }
         }

@@ -107,8 +107,7 @@ namespace Diplomacy
                 gameStarter.AddBehavior(new CivilWarBehavior());
                 gameStarter.AddBehavior(new UIBehavior());
 
-                gameStarter.AddBehavior(new WarDesireBehavior());
-                gameStarter.AddBehavior(new PeaceDesireBehavior());
+                gameStarter.AddBehavior(new WarAndAiTweaks.StrategicAIBehavior());
                 gameStarter.AddBehavior(new DiplomacyBehavior());
 
                 var currentKingdomDecisionPermissionModel = GetGameModel<KingdomDecisionPermissionModel>(gameStarterObject);

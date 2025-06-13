@@ -45,22 +45,17 @@ namespace Diplomacy.CampaignBehaviors
 
         private void ConsiderNonAggressionPact(Kingdom proposingKingdom)
         {
-            var inverseNormalizedValorLevel = 1 - proposingKingdom.Leader.GetNormalizedTraitValue(DefaultTraits.Valor);
+            var proposedKingdom = KingdomExtensions.AllActiveKingdoms
+                .Except(new[] { proposingKingdom })
+                .Where(kingdom => NonAggressionPactConditions.Instance.CanApply(proposingKingdom, kingdom))
+                .Where(kingdom => new WarAndAiTweaks.NonAggressionPactScoringModel().ShouldTakeActionBidirectional(proposingKingdom, kingdom))
+                .OrderByDescending(kingdom => kingdom.GetExpansionism()).FirstOrDefault();
 
-            if (MBRandom.RandomFloat < BasePactChance * inverseNormalizedValorLevel)
+            if (proposedKingdom is not null)
             {
-                var proposedKingdom = KingdomExtensions.AllActiveKingdoms
-                    .Except(new[] { proposingKingdom })
-                    .Where(kingdom => NonAggressionPactConditions.Instance.CanApply(proposingKingdom, kingdom))
-                    .Where(kingdom => new WarAndAiTweaks.NonAggressionPactScoringModel().ShouldTakeActionBidirectional(proposingKingdom, kingdom))
-                    .OrderByDescending(kingdom => kingdom.GetExpansionism()).FirstOrDefault();
-
-                if (proposedKingdom is not null)
-                {
-                    LogFactory.Get<DiplomaticAgreementBehavior>()
-                        .LogTrace($"[{CampaignTime.Now}] {proposingKingdom.Name} decided to form a NAP with {proposedKingdom.Name}.");
-                    FormNonAggressionPactAction.Apply(proposingKingdom, proposedKingdom);
-                }
+                LogFactory.Get<DiplomaticAgreementBehavior>()
+                    .LogTrace($"[{CampaignTime.Now}] {proposingKingdom.Name} decided to form a NAP with {proposedKingdom.Name}.");
+                FormNonAggressionPactAction.Apply(proposingKingdom, proposedKingdom);
             }
         }
 
@@ -70,10 +65,12 @@ namespace Diplomacy.CampaignBehaviors
             foreach (var pact in pacts)
             {
                 var otherKingdom = pact.GetOtherKingdom(kingdom);
-                if (MBRandom.RandomFloat < 0.03f // A bit less likely to break pacts than alliances
-                    && new WarAndAiTweaks.BreakNonAggressionPactScoringModel().ShouldTakeAction(kingdom, otherKingdom))
+                if (new WarAndAiTweaks.BreakNonAggressionPactScoringModel().ShouldTakeAction(kingdom, otherKingdom))
                 {
-                    pact.Expire();
+                    // This logic now resides in your new Actions folder
+                    Diplomacy.Actions.BreakNonAggressionPactAction.Apply(kingdom, otherKingdom);
+                    // After breaking a pact, re-evaluate later.
+                    return;
                 }
             }
         }

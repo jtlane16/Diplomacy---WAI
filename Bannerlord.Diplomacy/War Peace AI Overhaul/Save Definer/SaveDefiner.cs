@@ -12,8 +12,6 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
     {
         // FIX: Added all three of your CampaignBehaviors.
         AddClassDefinition(typeof(DiplomacyBehavior), 1);
-        AddClassDefinition(typeof(WarDesireBehavior), 2);
-        AddClassDefinition(typeof(PeaceDesireBehavior), 3);
     }
 
     protected override void DefineContainerDefinitions()

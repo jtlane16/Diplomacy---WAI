@@ -23,8 +23,8 @@ namespace Diplomacy.Actions
             {
                 pact!.Expire();
 
-                // Apply relation penalties for breaking the pact
-                ChangeRelationAction.ApplyRelationChangeBetweenHeroes(proposingKingdom.Leader, otherKingdom.Leader, -20);
+                // Apply more significant relation penalties
+                ChangeRelationAction.ApplyRelationChangeBetweenHeroes(proposingKingdom.Leader, otherKingdom.Leader, -25);
 
                 var textObject = new TextObject("{=PactBroken}{PROPOSING_KINGDOM} has broken their non-aggression pact with {OTHER_KINGDOM}.")
                     .SetTextVariable("PROPOSING_KINGDOM", proposingKingdom.Name)

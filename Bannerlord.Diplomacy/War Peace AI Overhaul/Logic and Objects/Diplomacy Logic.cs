@@ -12,13 +12,8 @@ using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Election;
-using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
-using TaleWorlds.Core;
 using TaleWorlds.Library;
-using TaleWorlds.Localization;
-
-using static Diplomacy.WarExhaustion.WarExhaustionManager;
 
 namespace WarAndAiTweaks
 {
@@ -53,13 +48,14 @@ namespace WarAndAiTweaks
     /// </summary>
     public class StrategicAIBehavior : CampaignBehaviorBase
     {
-        // How often, in days, a kingdom will evaluate its diplomatic situation.
         private const int DIPLOMACY_EVALUATION_COOLDOWN_DAYS = 3;
-        private Dictionary<string, CampaignTime> _lastDiplomaticEvaluation;
+
+        // FIX: Initialize the dictionary at declaration to prevent it from ever being null.
+        private Dictionary<string, CampaignTime> _lastDiplomaticEvaluation = new Dictionary<string, CampaignTime>();
 
         public StrategicAIBehavior()
         {
-            _lastDiplomaticEvaluation = new Dictionary<string, CampaignTime>();
+            // The initialization can be removed from the constructor as it's handled above.
         }
 
         public override void RegisterEvents()
@@ -69,11 +65,8 @@ namespace WarAndAiTweaks
 
         public override void SyncData(IDataStore store)
         {
+            // FIX: With the dictionary always initialized, the null check is no longer needed.
             store.SyncData("_lastDiplomaticEvaluation", ref _lastDiplomaticEvaluation);
-            if (_lastDiplomaticEvaluation == null)
-            {
-                _lastDiplomaticEvaluation = new Dictionary<string, CampaignTime>();
-            }
         }
 
         private void DailyClanTick(Clan clan)
@@ -123,6 +116,14 @@ namespace WarAndAiTweaks
                     // If the enemy is another AI, check if they also want peace.
                     else if (WantsPeace(enemy, us))
                     {
+                        // FIX: Add the logic to generate and display the peace reason.
+                        // We need to get the "us" kingdom's perspective on why they want peace.
+                        float ourExhaustion = WarExhaustionManager.Instance?.GetWarExhaustion(us, enemy) ?? 0f;
+                        PeaceScoreBreakdown breakdown = DiplomacyHelpers.ComputePeaceScore(us, enemy, ourExhaustion);
+                        string reason = DiplomacyHelpers.GeneratePeaceReasoning(us, breakdown);
+
+                        InformationManager.DisplayMessage(new InformationMessage(reason, Colors.Green));
+
                         // Both sides agree, so make peace directly without a vote.
                         MakePeaceAction.Apply(us, enemy);
                         return true; // Peace was made.
@@ -135,7 +136,7 @@ namespace WarAndAiTweaks
         /// <summary>
         /// Determines if a kingdom has sufficient desire to make peace with another.
         /// </summary>
-        private bool WantsPeace(Kingdom us, Kingdom them)
+        public bool WantsPeace(Kingdom us, Kingdom them)
         {
             if (us?.Leader == null || them?.Leader == null)
             {
@@ -151,8 +152,17 @@ namespace WarAndAiTweaks
                 desperateForPeace = true;
             }
 
+            // FIX: This line was likely removed by accident, causing error CS0103 for 'personalityModifier'.
             float personalityModifier = us.Leader.GetTraitLevel(DefaultTraits.Honor) * 10f;
-            float peaceDesire = -warProgress + exhaustion + personalityModifier;
+
+            float conquerorsResolve = us.Leader.GetTraitLevel(DefaultTraits.Valor) * -10f; // Negative score
+
+            // FIX: Call CalculateEconomicBoost using its class 'DiplomacyHelpers', resolving error CS0103.
+            // A negative boost (poor economy) creates positive pressure for peace.
+            float economicPressure = DiplomacyHelpers.CalculateEconomicBoost(us, true) * -40f;
+
+            // ADD conquerorsResolve to the final calculation.
+            float peaceDesire = -warProgress + exhaustion + personalityModifier + economicPressure + conquerorsResolve;
             float peaceThreshold = desperateForPeace ? 40f : 70f;
 
             return peaceDesire > peaceThreshold;
@@ -163,12 +173,6 @@ namespace WarAndAiTweaks
         /// </summary>
         private void ConsiderDeclaringWar(Kingdom us)
         {
-            // Do not declare war if already at war with anyone.
-            if (FactionManager.GetEnemyKingdoms(us).Any())
-            {
-                return;
-            }
-
             var potentialTargets = DiplomacyHelpers.MajorKingdoms()
                 .Where(them => them != us
                                && !FactionManager.IsAlliedWithFaction(us, them)
@@ -195,9 +199,12 @@ namespace WarAndAiTweaks
 
             if (bestTarget != null && bestScore > warThreshold)
             {
+                // FIX: Declare war FIRST, then display the reasoning message.
+                // This prevents the game's default war notification from overriding our custom message.
+                DeclareWarAction.ApplyByDefault(us, bestTarget.Target);
+
                 string reason = DiplomacyHelpers.GenerateWarReasoning(us, bestTarget);
                 InformationManager.DisplayMessage(new InformationMessage(reason, Colors.Red));
-                DeclareWarAction.ApplyByDefault(us, bestTarget.Target);
             }
         }
 
@@ -221,12 +228,6 @@ namespace WarAndAiTweaks
         }
     }
 
-    #region Old Behaviors (To be removed/replaced)
-    public class WarDesireBehavior : CampaignBehaviorBase { public override void RegisterEvents() { } public override void SyncData(IDataStore s) { } }
-    public class PeaceDesireBehavior : CampaignBehaviorBase { public override void RegisterEvents() { } public override void SyncData(IDataStore s) { } public static void NotifyWarStarted(string id) { } public static void SetExhaustion(string kid, float v) { } public static void BumpDesire(string kid, float d) { } public bool IsPeaceProposalAcceptable(Kingdom r, Kingdom p) => true; }
-    #endregion
-
-    #region Harmony Patches (No Change)
     [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomWarDecision")]
     public static class Patch_DisableRandomWar { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
 
@@ -234,6 +235,19 @@ namespace WarAndAiTweaks
     public static class Patch_DisableRandomPeace { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
 
     [HarmonyPatch(typeof(KingdomDiplomacyVM), "OnDeclarePeace")]
-    public class KingdomPlayerPeacePatch { public static bool Prefix(KingdomWarItemVM item) { return true; } }
-    #endregion
+    public class KingdomPlayerPeacePatch
+    {
+        public static bool Prefix(KingdomWarItemVM item)
+        {
+            var peaceBehavior = Campaign.Current.GetCampaignBehavior<StrategicAIBehavior>();
+            if (peaceBehavior == null) return true;
+            var playerKingdom = Hero.MainHero.Clan.Kingdom;
+            var targetKingdom = item.Faction2 as Kingdom;
+            if (playerKingdom == null || targetKingdom == null) return true;
+            if (peaceBehavior.WantsPeace(targetKingdom, playerKingdom)) return true;
+
+            InformationManager.DisplayMessage(new InformationMessage($"{targetKingdom.Name} is not interested in peace at this time.", Colors.Red));
+            return false;
+        }
+    }
 }

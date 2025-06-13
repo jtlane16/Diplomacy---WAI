@@ -114,6 +114,14 @@ namespace WarAndAiTweaks
 
             const float W_THREAT = 1.0f, W_BALANCE = 2.0f, W_MULTI = 1.0f, W_DISTANCE = 1.0f;
             breakdown.FinalScore = W_THREAT * breakdown.ThreatScore + W_BALANCE * breakdown.PowerBalanceScore - W_MULTI * breakdown.MultiWarPenalty - W_DISTANCE * breakdown.DistancePenalty + breakdown.DogpileBonus;
+
+            float ourEconomicReadiness = CalculateEconomicBoost(us, false) * 25f;
+            breakdown.FinalScore += ourEconomicReadiness;
+
+            // A wealthy target is more appealing to conquer.
+            float targetEconomicValue = CalculateEconomicBoost(them, false) * 30f;
+            breakdown.FinalScore += targetEconomicValue;
+
             return breakdown;
         }
 

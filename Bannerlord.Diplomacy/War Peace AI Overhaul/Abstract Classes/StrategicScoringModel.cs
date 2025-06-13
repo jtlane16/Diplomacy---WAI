@@ -96,10 +96,13 @@ namespace WarAndAiTweaks
 
             // --- Proximity ---
             // Neighbors make better allies as they can respond to threats more easily.
-            if (DiplomacyHelpers.AreNeighbors(us, them))
-            {
-                score.Add(25f, new TextObject("Geographic Proximity"));
-            }
+            int proximityScore = DiplomacyBehavior.Instance.GetNeighborProximityScore(us, them);
+if (proximityScore > 0)
+{
+    // The bonus now scales with how many borders they share.
+    // The multiplier (e.g., 4f) can be tweaked for balance.
+    score.Add(proximityScore * 4f, new TextObject("Geographic Proximity"));
+}
 
             // --- Existing Relationships ---
             // Existing alliances with our enemies are a major red flag.
@@ -136,41 +139,42 @@ namespace WarAndAiTweaks
     /// Scores the strategic value of forming a Non-Aggression Pact.
     /// Pacts are valued for securing borders to focus on other wars or to avoid a multi-front conflict.
     /// </summary>
+    // In StrategicScoringModel.cs
+
     public class NonAggressionPactScoringModel : AbstractStrategicScoringModel
     {
-        public override float ScoreThreshold => 60f;
+        // The goal score is now higher.
+        public override float ScoreThreshold => 75f;
 
         protected override void EvaluateComponentScores(Kingdom us, Kingdom them, ref ExplainedNumber score)
         {
-            // --- Base Desire ---
-            score.Add(30f, new TextObject("Base Desire for Pact"));
+            // Base desire is lower.
+            score.Add(15f, new TextObject("Base Desire for Pact"));
 
-            // --- Current War Status ---
             // Kingdoms already at war are more likely to seek pacts to secure their other borders.
             int wars = DiplomacyHelpers.MajorEnemies(us).Count();
             if (wars > 0)
             {
-                score.Add(wars * 20f, new TextObject("Engaged in Other Wars"));
+                // This is now a more powerful incentive.
+                score.Add(wars * 30f, new TextObject("Engaged in Other Wars"));
             }
 
-            // --- Threat from Target ---
-            // A pact with a much stronger neighbor is highly valuable.
+            // A pact with a much stronger neighbor is still valuable.
             float powerRatio = them.TotalStrength / Math.Max(1f, us.TotalStrength);
             if (powerRatio > 1.2f)
             {
                 score.Add(powerRatio * 25f, new TextObject("Perceived Threat"));
             }
 
-            // --- Proximity ---
-            // Pacts are most valuable with neighbors.
+            // The neighbor bonus is slightly reduced.
             if (DiplomacyHelpers.AreNeighbors(us, them))
             {
-                score.Add(30f, new TextObject("Shared Border Security"));
+                score.Add(25f, new TextObject("Shared Border Security"));
             }
             else
             {
-                // Less valuable if not a direct neighbor.
-                score.Add(-20f, new TextObject("Not a direct neighbor"));
+                // Made the penalty for non-neighbors stronger.
+                score.Add(-50f, new TextObject("Not a direct neighbor"));
             }
 
             // --- Relationship between leaders ---
@@ -233,6 +237,8 @@ namespace WarAndAiTweaks
             {
                 score.Add(30f, new TextObject("Opportunity to attack {WEAK_NEIGHBOR}").SetTextVariable("WEAK_NEIGHBOR", weakNeighbor.Name));
             }
+
+
         }
     }
 
@@ -274,6 +280,19 @@ namespace WarAndAiTweaks
                     score.Add(-relation, new TextObject("Deteriorated Relations"));
                 }
             }
+
+            // --- Relationship and Trust ---
+            if (us.Leader != null && them.Leader != null)
+            {
+                // FIX: Added a negative sign. High relation now SUBTRACTS from the score.
+                score.Add(us.Leader.GetRelation(them.Leader) * -1.0f, new TextObject("Leader Relations"));
+            }
+
+            // --- Economic Factor ---
+            // A stable economy makes a kingdom MORE willing to consider a war (and thus break a pact).
+            // FIX: Removed the negative sign. A positive boost now ADDS to the score.
+            score.Add(DiplomacyHelpers.CalculateEconomicBoost(us, false) * 50f, new TextObject("Economic Readiness for War"));
+
         }
     }
 }

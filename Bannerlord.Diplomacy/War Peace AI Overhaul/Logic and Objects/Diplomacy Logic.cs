@@ -76,9 +76,11 @@ namespace WarAndAiTweaks
             }
 
             var kingdom = clan.Kingdom;
+            Kingdom kingdom2 = clan.Kingdom;
+            if (kingdom2 == null) { return; }
+            if (_lastDiplomaticEvaluation.TryGetValue(kingdom2.StringId, out var value))
 
-            // Check if it's time to evaluate diplomacy for this kingdom
-            if (!_lastDiplomaticEvaluation.TryGetValue(kingdom.StringId, out var lastEvaluationTime)
+                if (!_lastDiplomaticEvaluation.TryGetValue(kingdom.StringId, out var lastEvaluationTime)
                 || (CampaignTime.Now - lastEvaluationTime).ToDays > DIPLOMACY_EVALUATION_COOLDOWN_DAYS)
             {
                 // First, check if peace should be made in any ongoing wars.

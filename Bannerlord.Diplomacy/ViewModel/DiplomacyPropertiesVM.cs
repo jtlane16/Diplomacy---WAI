@@ -79,7 +79,7 @@ namespace Diplomacy.ViewModel
             }
             else
             {
-                textObject = TextObject.Empty;
+                textObject = new TextObject();
             }
 
             return new HintViewModel(textObject);

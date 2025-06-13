@@ -299,7 +299,7 @@ namespace Diplomacy.Messengers
             {
                 ["HERO_NAME"] = targetHero.Name,
                 ["HAS_FACTION"] = new TextObject(faction2 != null ? 1 : 0),
-                ["FACTION2_NAME"] = faction2?.Name ?? TextObject.Empty
+                ["FACTION2_NAME"] = faction2?.Name ?? new TextObject()
             });
             TextObject bribeTextObject;
             if (requiresBribing && additionalExpenses?.Value > 0)
@@ -312,7 +312,7 @@ namespace Diplomacy.Messengers
                 bribeTextObject.SetTextVariable("CAN_AFFORD", additionalExpenses.CanPayCost() ? 1 : 0);
             }
             else
-                bribeTextObject = TextObject.Empty;
+                bribeTextObject = new TextObject();
 
             textObject.SetTextVariable("FACTION1_NAME", faction1.Name.ToString());
             textObject.SetTextVariable("ADDRESSEE_TEXT", addressee.ToString());
@@ -329,7 +329,7 @@ namespace Diplomacy.Messengers
             {
                 ["HERO_NAME"] = targetHero.Name,
                 ["HAS_FACTION"] = new TextObject(faction2 != null ? 1 : 0),
-                ["FACTION2_NAME"] = faction2?.Name ?? TextObject.Empty
+                ["FACTION2_NAME"] = faction2?.Name ?? new TextObject()
             });
             textObject.SetTextVariable("ADDRESSEE_TEXT", addressee.ToString());
             textObject.SetTextVariable("TRAVEL_TIME", travelDays);
@@ -371,7 +371,7 @@ namespace Diplomacy.Messengers
                 return false;
             }
 
-            exception = TextObject.Empty;
+            exception = new TextObject();
             return true;
         }
 
@@ -398,7 +398,7 @@ namespace Diplomacy.Messengers
                 {
                     ["HERO_NAME"] = targetHero.Name,
                     ["IS_MOBILE"] = targetHero.PartyBelongedToAsPrisoner.IsSettlement ? 0 : 1,
-                    ["DETENTION_PLACE"] = targetHero.PartyBelongedToAsPrisoner.IsSettlement ? targetHero.PartyBelongedToAsPrisoner.Settlement.Name : ((targetHero.PartyBelongedToAsPrisoner.LeaderHero?.Name ?? targetHero.PartyBelongedToAsPrisoner.Name) ?? TextObject.Empty)
+                    ["DETENTION_PLACE"] = targetHero.PartyBelongedToAsPrisoner.IsSettlement ? targetHero.PartyBelongedToAsPrisoner.Settlement.Name : ((targetHero.PartyBelongedToAsPrisoner.LeaderHero?.Name ?? targetHero.PartyBelongedToAsPrisoner.Name) ?? new TextObject())
                 });
             else if (targetHero.IsFugitive)
                 reason = new("{=1BISlFYx}{HERO_NAME} is fugitive and doesn't want to be found. ", new() { ["HERO_NAME"] = targetHero.Name });
@@ -409,7 +409,7 @@ namespace Diplomacy.Messengers
             else if (targetHero.IsChild)
                 reason = new("{=3lknR86H}{HERO_NAME} is too inexperienced to participate in formal meetings. ", new() { ["HERO_NAME"] = targetHero.Name });
             else
-                reason = TextObject.Empty;
+                reason = new TextObject();
             return reason;
         }
 

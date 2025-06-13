@@ -271,7 +271,7 @@ namespace Diplomacy.CivilWar.Factions
                     : new TextObject("{=uUu7DEDU}As a member of the loyalists, you gained {INFLUENCE} influence.").SetTextVariable("INFLUENCE",
                         Math.Abs(MemberInfluenceOnSuccess));
             else
-                text = TextObject.Empty;
+                text = new TextObject();
             return text;
         }
     }

@@ -22,7 +22,7 @@ namespace Diplomacy.CivilWar.Factions
                     name = new TextObject("{=wUspUo1y}Abdication").ToString();
                     break;
                 default:
-                    name = TextObject.Empty.ToString();
+                    name = new TextObject().ToString();
                     break;
             }
 

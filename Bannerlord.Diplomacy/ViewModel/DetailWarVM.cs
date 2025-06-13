@@ -148,9 +148,9 @@ namespace Diplomacy.ViewModel
             StatsLabel = GameTexts.FindText("str_stat").ToString();
             WarReportLabel = new TextObject("{=mCue7aFc}War Report").ToString();
             ActiveQuestWarning = "";
-            ActiveQuestHint = new(TextObject.Empty);
-            PlayerCriticaExhaustionlHint = new(TextObject.Empty);
-            OpponentCriticaExhaustionlHint = new(TextObject.Empty);
+            ActiveQuestHint = new(new TextObject());
+            PlayerCriticaExhaustionlHint = new(new TextObject());
+            OpponentCriticaExhaustionlHint = new(new TextObject());
 
             RefreshValues();
         }
@@ -188,7 +188,7 @@ namespace Diplomacy.ViewModel
                     break;
                 default:
                     ActiveQuestWarning = "";
-                    ActiveQuestHint = new(TextObject.Empty);
+                    ActiveQuestHint = new(new TextObject());
                     questStateWarningHeight = 0;
                     break;
             }
@@ -212,7 +212,7 @@ namespace Diplomacy.ViewModel
                     ["EXHAUSTED_FACTION"] = faction1.Name,
                     ["OTHER_FACTION"] = faction2.Name,
                     ["IS_CIVIL_WAR"] = (faction1.IsRebelKingdom() || faction2.IsRebelKingdom()) ? 1 : 0
-                })) : new(TextObject.Empty);
+                })) : new(new TextObject());
         }
 
         [UsedImplicitly]

@@ -25,7 +25,7 @@ namespace Diplomacy.Models
                 isWarDecisionAllowed = _previousModel.IsWarDecisionAllowedBetweenKingdoms(kingdom1, kingdom2, out reason);
             else
             {
-                reason = TextObject.Empty;
+                reason = new TextObject();
                 isWarDecisionAllowed = true;
             }
 
@@ -34,7 +34,7 @@ namespace Diplomacy.Models
                 var listExceptions = DeclareWarConditions.Instance.CanApplyExceptions(kingdom1, kingdom2, bypassCosts: true);
                 if (listExceptions is not null && listExceptions.Count > 0)
                 {
-                    reason = listExceptions.FirstOrDefault() ?? TextObject.Empty;
+                    reason = listExceptions.FirstOrDefault() ?? new TextObject();
                     isWarDecisionAllowed = false;
                 }
             }
@@ -49,7 +49,7 @@ namespace Diplomacy.Models
                 isPeaceDecisionAllowed = _previousModel.IsPeaceDecisionAllowedBetweenKingdoms(kingdom1, kingdom2, out reason);
             else
             {
-                reason = TextObject.Empty;
+                reason = new TextObject();
                 isPeaceDecisionAllowed = true;
             }
 
@@ -58,7 +58,7 @@ namespace Diplomacy.Models
                 var listExceptions = MakePeaceConditions.Instance.CanApplyExceptions(kingdom1, kingdom2, bypassCosts: true);
                 if (listExceptions is not null && listExceptions.Count > 0)
                 {
-                    reason = listExceptions.FirstOrDefault() ?? TextObject.Empty;
+                    reason = listExceptions.FirstOrDefault() ?? new TextObject();
                     isPeaceDecisionAllowed = false;
                 }
             }

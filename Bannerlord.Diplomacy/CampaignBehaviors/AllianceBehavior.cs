@@ -119,7 +119,7 @@ namespace Diplomacy.CampaignBehaviors
                 .ToList();
 
             foreach (var potentialAlly in potentialAllies)
-                if (MBRandom.RandomFloat < 0.05f && AllianceScoringModel.Instance.ShouldFormBidirectional(kingdom, potentialAlly))
+                if (new WarAndAiTweaks.AllianceScoringModel().ShouldTakeActionBidirectional(kingdom, potentialAlly))
                     DeclareAllianceAction.Apply(kingdom, potentialAlly);
         }
 
@@ -133,7 +133,7 @@ namespace Diplomacy.CampaignBehaviors
             {
                 if (MBRandom.RandomFloat < 0.05f
                     && BreakAllianceConditions.Instance.CanApply(kingdom, alliedKingdom)
-                    && !AllianceScoringModel.Instance.ShouldForm(kingdom, alliedKingdom))
+                    && new WarAndAiTweaks.BreakAllianceScoringModel().ShouldTakeAction(kingdom, alliedKingdom))
                 {
                     BreakAllianceAction.Apply(kingdom, alliedKingdom);
                 }

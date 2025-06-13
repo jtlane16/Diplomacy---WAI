@@ -7,7 +7,7 @@ using TaleWorlds.SaveSystem;
 
 namespace Diplomacy.DiplomaticAction
 {
-    abstract class DiplomaticAgreement
+    public abstract class DiplomaticAgreement
     {
         [SaveableProperty(1)]
         public CampaignTime StartDate { get; protected set; }

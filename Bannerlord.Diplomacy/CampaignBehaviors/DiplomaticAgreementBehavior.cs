@@ -11,6 +11,7 @@ using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.Core;
+using TaleWorlds.LinQuick;
 
 namespace Diplomacy.CampaignBehaviors
 {
@@ -38,6 +39,7 @@ namespace Diplomacy.CampaignBehaviors
             if (clan.MapFaction.IsKingdomFaction && clan.MapFaction.Leader == clan.Leader && !clan.Leader.IsHumanPlayerCharacter)
             {
                 ConsiderNonAggressionPact(clan.Kingdom);
+                ConsiderBreakingNonAggressionPacts(clan.Kingdom);
             }
         }
 
@@ -50,7 +52,7 @@ namespace Diplomacy.CampaignBehaviors
                 var proposedKingdom = KingdomExtensions.AllActiveKingdoms
                     .Except(new[] { proposingKingdom })
                     .Where(kingdom => NonAggressionPactConditions.Instance.CanApply(proposingKingdom, kingdom))
-                    .Where(kingdom => NonAggressionPactScoringModel.Instance.ShouldFormBidirectional(proposingKingdom, kingdom))
+                    .Where(kingdom => new WarAndAiTweaks.NonAggressionPactScoringModel().ShouldTakeActionBidirectional(proposingKingdom, kingdom))
                     .OrderByDescending(kingdom => kingdom.GetExpansionism()).FirstOrDefault();
 
                 if (proposedKingdom is not null)
@@ -58,6 +60,20 @@ namespace Diplomacy.CampaignBehaviors
                     LogFactory.Get<DiplomaticAgreementBehavior>()
                         .LogTrace($"[{CampaignTime.Now}] {proposingKingdom.Name} decided to form a NAP with {proposedKingdom.Name}.");
                     FormNonAggressionPactAction.Apply(proposingKingdom, proposedKingdom);
+                }
+            }
+        }
+
+        private void ConsiderBreakingNonAggressionPacts(Kingdom kingdom)
+        {
+            var pacts = DiplomaticAgreementManager.GetPacts(kingdom);
+            foreach (var pact in pacts)
+            {
+                var otherKingdom = pact.GetOtherKingdom(kingdom);
+                if (MBRandom.RandomFloat < 0.03f // A bit less likely to break pacts than alliances
+                    && new WarAndAiTweaks.BreakNonAggressionPactScoringModel().ShouldTakeAction(kingdom, otherKingdom))
+                {
+                    pact.Expire();
                 }
             }
         }

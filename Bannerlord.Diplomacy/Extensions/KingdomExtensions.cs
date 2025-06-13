@@ -1,5 +1,6 @@
 ﻿using Diplomacy.CivilWar;
 using Diplomacy.CivilWar.Factions;
+using Diplomacy.DiplomaticAction;
 
 using System;
 using System.Collections.Generic;
@@ -105,5 +106,11 @@ namespace Diplomacy.Extensions
         }
 
         public static IEnumerable<RebelFaction> GetRebelFactions(this Kingdom kingdom) => RebelFactionManager.GetRebelFaction(kingdom);
+
+        public static Kingdom GetOtherKingdom(this DiplomaticAgreement agreement, Kingdom kingdom)
+        {
+            var otherFaction = agreement.Factions.Faction1 == kingdom ? agreement.Factions.Faction2 : agreement.Factions.Faction1;
+            return (Kingdom) otherFaction;
+        }
     }
 }

@@ -39,6 +39,25 @@ namespace Diplomacy.DiplomaticAction
             }
         }
 
+        public static IEnumerable<NonAggressionPactAgreement> GetPacts(Kingdom kingdom)
+        {
+            if (Instance == null)
+            {
+                yield break;
+            }
+
+            foreach (var kvp in Instance.Agreements)
+            {
+                if (kvp.Key.Faction1 == kingdom || kvp.Key.Faction2 == kingdom)
+                {
+                    foreach (var pact in kvp.Value.OfType<NonAggressionPactAgreement>().Where(p => !p.IsExpired()))
+                    {
+                        yield return pact;
+                    }
+                }
+            }
+        }
+
         public static void RegisterAgreement(Kingdom kingdom, Kingdom otherKingdom, DiplomaticAgreement diplomaticAgreement)
         {
             var factionMapping = new FactionPair(kingdom, otherKingdom);

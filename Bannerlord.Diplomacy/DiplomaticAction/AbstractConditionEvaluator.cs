@@ -23,9 +23,20 @@ namespace Diplomacy.DiplomaticAction
 
         public bool CanApply(Kingdom kingdom, Kingdom otherKingdom, bool forcePlayerCosts = false, bool bypassCosts = false)
         {
-            // FIXME: Simplified LINQ here, but it also had the effect of not executing ApplyCondition on some conditions if an early one failed.
-            // So if there are conditions with side effects that should still execute even upon failure, this needs to be changed.
-            return Conditions.All(c => c.ApplyCondition(kingdom, otherKingdom, out _, forcePlayerCosts, bypassCosts));
+            return CanApply(kingdom, otherKingdom, out _, forcePlayerCosts, bypassCosts);
+        }
+
+        public bool CanApply(Kingdom kingdom, Kingdom otherKingdom, out TextObject? failedReason, bool forcePlayerCosts = false, bool bypassCosts = false)
+        {
+            failedReason = null;
+            foreach (var condition in Conditions)
+            {
+                if (!condition.ApplyCondition(kingdom, otherKingdom, out failedReason, forcePlayerCosts, bypassCosts))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         public List<TextObject> CanApplyExceptions(Kingdom kingdom, Kingdom otherKingdom, bool forcePlayerCosts = false, bool bypassCosts = false)

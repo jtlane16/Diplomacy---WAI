@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using TaleWorlds.CampaignSystem;
@@ -8,16 +9,16 @@ using TaleWorlds.Library;
 using Diplomacy.CampaignBehaviors;
 using Diplomacy.Extensions;
 using TaleWorlds.Localization;
+using TaleWorlds.TwoDimension;
 
 namespace WarAndAiTweaks
 {
     public static class DiplomacyHelpers
     {
         #region Constants
-        private const float BASE_THRESH = 35f;
+        private const float BASE_THRESH = 55f; // Increased base threshold
         private const float THRESH_PEACE_BONUS = -5f;
-        private const float THRESH_WAR_PENALTY = +5f;
-        private const float THRESH_PER_EXISTING_WAR = 10f;
+        private const float THRESH_WAR_PENALTY = +15f; // Increased penalty for being at war
         #endregion
 
         #region General Helpers
@@ -39,13 +40,9 @@ namespace WarAndAiTweaks
             return diplomacyBehavior.GetNeighborsOf(k1).Contains(k2);
         }
 
-        /// <summary>
-        /// Calculates the effective military strength of a kingdom, including its allies.
-        /// </summary>
         public static float GetEffectiveStrength(Kingdom kingdom)
         {
             float totalStrength = kingdom.TotalStrength;
-            // Add a portion of allied strength, as they may not fully commit.
             foreach (var ally in kingdom.GetAlliedKingdoms())
             {
                 totalStrength += ally.TotalStrength * 0.75f;
@@ -70,7 +67,7 @@ namespace WarAndAiTweaks
             bool atWar = wars > 0;
             float baseThresh = BASE_THRESH
                               + (atWar ? THRESH_WAR_PENALTY : THRESH_PEACE_BONUS)
-                              + THRESH_PER_EXISTING_WAR * wars;
+                              + (wars * 20f); // Additive penalty per war
             return baseThresh;
         }
 
@@ -79,8 +76,8 @@ namespace WarAndAiTweaks
             float ownStrength = GetEffectiveStrength(kingdom);
 
             var allies = kingdom.GetAlliedKingdoms();
-            if (allies == null || allies.Count() == 0)
-                return ownStrength; // No allies
+            if (allies == null || !allies.Any())
+                return ownStrength;
 
             float alliesStrength = allies.Sum(GetEffectiveStrength) * 0.75f;
             return ownStrength + alliesStrength;
@@ -90,16 +87,39 @@ namespace WarAndAiTweaks
         {
             var breakdown = new WarScoreBreakdown(them);
 
-            // LOGIC CHANGE: Use effective strength (including allies) for calculations
             float usStr = GetCoalitionStrength(us);
             float themStr = GetCoalitionStrength(them);
 
-            breakdown.ThreatScore = (themStr / MathF.Max(1f, usStr)) * 50f + them.Settlements.Count * 2f;
+            // REBALANCE: Drastically reduced the impact of both relative strength and fief count on threat.
+            breakdown.ThreatScore = (themStr / Mathf.Max(1f, usStr)) * 20f + them.Settlements.Count * 0.5f;
             breakdown.PowerBalanceScore = (usStr - themStr) / (usStr + themStr + 1f);
-            breakdown.MultiWarPenalty = MajorEnemies(us).Count() * 5f;
+
+            // REBALANCE: A more nuanced and punitive multi-war penalty.
+            int numWars = MajorEnemies(us).Count();
+            float multiWarPenalty;
+            if (numWars == 1)
+            {
+                // High penalty for a 2nd war
+                multiWarPenalty = 60f;
+            }
+            else if (numWars == 2)
+            {
+                // Very high penalty for a 3rd war
+                multiWarPenalty = 150f;
+            }
+            else if (numWars > 2)
+            {
+                // Prohibitive penalty for any more wars
+                multiWarPenalty = 500f;
+            }
+            else
+            {
+                multiWarPenalty = 0f;
+            }
+            breakdown.MultiWarPenalty = multiWarPenalty;
 
             float distKm = Campaign.Current.Models.MapDistanceModel.GetDistance(us.FactionMidSettlement, them.FactionMidSettlement);
-            breakdown.DistancePenalty = distKm * 0.1f;
+            breakdown.DistancePenalty = distKm * 0.25f; // Slightly increased distance penalty
 
             var targetEnemies = MajorEnemies(them).ToList();
             var allKingdoms = MajorKingdoms().ToList();
@@ -108,18 +128,20 @@ namespace WarAndAiTweaks
 
             if (isTargetSnowballing && targetEnemies.Any())
             {
-                breakdown.DogpileBonus += 35f;
-                breakdown.DogpileBonus += targetEnemies.Count * 10f;
+                breakdown.DogpileBonus = 35f + (targetEnemies.Count * 10f);
             }
 
-            const float W_THREAT = 1.0f, W_BALANCE = 2.0f, W_MULTI = 1.0f, W_DISTANCE = 1.0f;
-            breakdown.FinalScore = W_THREAT * breakdown.ThreatScore + W_BALANCE * breakdown.PowerBalanceScore - W_MULTI * breakdown.MultiWarPenalty - W_DISTANCE * breakdown.DistancePenalty + breakdown.DogpileBonus;
+            const float W_THREAT = 1.0f, W_BALANCE = 1.5f, W_MULTI = 1.0f, W_DISTANCE = 1.0f;
+            breakdown.FinalScore = W_THREAT * breakdown.ThreatScore
+                                 + W_BALANCE * breakdown.PowerBalanceScore
+                                 - W_MULTI * breakdown.MultiWarPenalty
+                                 - W_DISTANCE * breakdown.DistancePenalty
+                                 + breakdown.DogpileBonus;
 
-            float ourEconomicReadiness = CalculateEconomicBoost(us, false) * 25f;
+            float ourEconomicReadiness = CalculateEconomicBoost(us, false) * 20f;
             breakdown.FinalScore += ourEconomicReadiness;
 
-            // A wealthy target is more appealing to conquer.
-            float targetEconomicValue = CalculateEconomicBoost(them, false) * 30f;
+            float targetEconomicValue = CalculateEconomicBoost(them, false) * 25f;
             breakdown.FinalScore += targetEconomicValue;
 
             return breakdown;
@@ -129,8 +151,7 @@ namespace WarAndAiTweaks
         {
             var breakdown = new PeaceScoreBreakdown(them)
             {
-                // LOGIC CHANGE: Use effective strength for danger calculation
-                DangerScore = (GetCoalitionStrength(them) / MathF.Max(1f, GetCoalitionStrength(us))) * 50f + them.Settlements.Count * 2f,
+                DangerScore = (GetCoalitionStrength(them) / Mathf.Max(1f, GetCoalitionStrength(us))) * 50f + them.Settlements.Count * 2f,
                 ExhaustionScore = usExhaustion
             };
 

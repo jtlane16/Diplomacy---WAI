@@ -37,7 +37,7 @@ namespace Diplomacy.Patches
                 return false;
             }
 
-            return true;
+            return false;
         }
 
         private static bool ConsiderPeacePrefix(Clan clan, Clan otherClan, Kingdom kingdom, IFaction otherFaction, out MakePeaceKingdomDecision? decision, ref bool __result)
@@ -51,7 +51,7 @@ namespace Diplomacy.Patches
                 return false;
             }
 
-            return true;
+            return false;
         }
     }
 }

@@ -39,7 +39,7 @@ namespace Diplomacy.Patches
                 return false;
             }
 
-            return true;
+            return false;
         }
     }
 }

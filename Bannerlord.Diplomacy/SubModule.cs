@@ -52,7 +52,12 @@ namespace Diplomacy
             extender.Register(typeof(SubModule).Assembly);
             extender.Enable();
 
-            this.AddSerilogLoggerProvider($"{Name}.log", new[] { $"{Name}.*" }, config => config.MinimumLevel.Is(LogEventLevel.Verbose));
+            // Configure the main mod log
+            this.AddSerilogLoggerProvider($"{Name}.log", new[] { $"{Name}.*" }, config => config.MinimumLevel.Is(LogEventLevel.Information));
+
+            // Configure the separate AI log
+            this.AddSerilogLoggerProvider("Diplomacy_AI.log", new[] { "WarAndAiTweaks.*" }, config => config.MinimumLevel.Is(LogEventLevel.Information));
+
             Log = LogFactory.Get<SubModule>();
             Log.LogInformation($"Loading {Name} {Version}...");
 

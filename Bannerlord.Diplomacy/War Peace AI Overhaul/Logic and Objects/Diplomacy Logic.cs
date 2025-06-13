@@ -1,7 +1,12 @@
-﻿using HarmonyLib;
+﻿using Diplomacy.DiplomaticAction.WarPeace;
+using Diplomacy.WarExhaustion;
+
+using HarmonyLib;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
+
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
@@ -11,9 +16,9 @@ using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
-using Diplomacy.WarExhaustion;
-using Diplomacy.DiplomaticAction.WarPeace;
 using TaleWorlds.Localization;
+
+using static Diplomacy.WarExhaustion.WarExhaustionManager;
 
 namespace WarAndAiTweaks
 {

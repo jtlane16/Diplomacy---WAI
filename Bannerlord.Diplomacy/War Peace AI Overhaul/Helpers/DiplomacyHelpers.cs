@@ -74,13 +74,25 @@ namespace WarAndAiTweaks
             return baseThresh;
         }
 
+        public static float GetCoalitionStrength(Kingdom kingdom)
+        {
+            float ownStrength = GetEffectiveStrength(kingdom);
+
+            var allies = kingdom.GetAlliedKingdoms();
+            if (allies == null || allies.Count() == 0)
+                return ownStrength; // No allies
+
+            float alliesStrength = allies.Sum(GetEffectiveStrength) * 0.75f;
+            return ownStrength + alliesStrength;
+        }
+
         public static WarScoreBreakdown ComputeWarDesireScore(Kingdom us, Kingdom them)
         {
             var breakdown = new WarScoreBreakdown(them);
 
             // LOGIC CHANGE: Use effective strength (including allies) for calculations
-            float usStr = GetEffectiveStrength(us);
-            float themStr = GetEffectiveStrength(them);
+            float usStr = GetCoalitionStrength(us);
+            float themStr = GetCoalitionStrength(them);
 
             breakdown.ThreatScore = (themStr / MathF.Max(1f, usStr)) * 50f + them.Settlements.Count * 2f;
             breakdown.PowerBalanceScore = (usStr - themStr) / (usStr + themStr + 1f);
@@ -110,7 +122,7 @@ namespace WarAndAiTweaks
             var breakdown = new PeaceScoreBreakdown(them)
             {
                 // LOGIC CHANGE: Use effective strength for danger calculation
-                DangerScore = (GetEffectiveStrength(them) / MathF.Max(1f, GetEffectiveStrength(us))) * 50f + them.Settlements.Count * 2f,
+                DangerScore = (GetCoalitionStrength(them) / MathF.Max(1f, GetCoalitionStrength(us))) * 50f + them.Settlements.Count * 2f,
                 ExhaustionScore = usExhaustion
             };
 

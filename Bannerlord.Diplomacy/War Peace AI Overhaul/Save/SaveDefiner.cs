@@ -1,7 +1,7 @@
 ﻿// File: SaveDefiner.cs
 using System.Collections.Generic;
 using TaleWorlds.SaveSystem;
-using WarAndAiTweaks;
+using WarAndAiTweaks.AI.Behaviors;
 
 public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
 {
@@ -11,15 +11,12 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
     protected override void DefineClassTypes()
     {
         // FIX: Added all three of your CampaignBehaviors.
-        AddClassDefinition(typeof(DiplomacyBehavior), 1);
+        AddClassDefinition(typeof(StrategicAICampaignBehavior), 1);
     }
 
     protected override void DefineContainerDefinitions()
     {
         // FIX: Added the missing container types used in your behaviors.
-        ConstructContainerDefinition(typeof(Dictionary<string, float>));
         ConstructContainerDefinition(typeof(Dictionary<string, int>));
-        ConstructContainerDefinition(typeof(Dictionary<string, List<string>>));
-        ConstructContainerDefinition(typeof(Dictionary<string, Dictionary<string, float>>));
     }
 }

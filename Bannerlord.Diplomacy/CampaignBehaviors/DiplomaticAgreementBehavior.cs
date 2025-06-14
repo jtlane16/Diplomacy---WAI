@@ -13,6 +13,10 @@ using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.Core;
 using TaleWorlds.LinQuick;
 
+using WarAndAiTweaks.AI;
+
+using static WarAndAiTweaks.AI.StrategicAI;
+
 namespace Diplomacy.CampaignBehaviors
 {
     internal sealed class DiplomaticAgreementBehavior : CampaignBehaviorBase
@@ -39,39 +43,29 @@ namespace Diplomacy.CampaignBehaviors
             if (clan.MapFaction.IsKingdomFaction && clan.MapFaction.Leader == clan.Leader && !clan.Leader.IsHumanPlayerCharacter)
             {
                 ConsiderNonAggressionPact(clan.Kingdom);
-                ConsiderBreakingNonAggressionPacts(clan.Kingdom);
             }
         }
 
         private void ConsiderNonAggressionPact(Kingdom proposingKingdom)
         {
-            var proposedKingdom = KingdomExtensions.AllActiveKingdoms
-                .Except(new[] { proposingKingdom })
-                .Where(kingdom => NonAggressionPactConditions.Instance.CanApply(proposingKingdom, kingdom))
-                .Where(kingdom => new WarAndAiTweaks.NonAggressionPactScoringModel().ShouldTakeActionBidirectional(proposingKingdom, kingdom))
-                .OrderByDescending(kingdom => kingdom.GetExpansionism()).FirstOrDefault();
+            // 1) Re-use a single evaluator instance
+            INonAggressionPactEvaluator napEvaluator = new WarAndAiTweaks.AI.NonAggressionPackedScoringModel();
 
-            if (proposedKingdom is not null)
+            // 2) Pick the best candidate that *both* sides agree on (≥ 50 by default)
+            Kingdom? proposedKingdom = KingdomExtensions.AllActiveKingdoms
+            .Except(new[] { proposingKingdom })
+            .Where(k => NonAggressionPactConditions.Instance.CanApply(proposingKingdom, k))
+            .Where(k => napEvaluator.ShouldTakeActionBidirectional(proposingKingdom, k, threshold: 50f))
+            .OrderByDescending(k => napEvaluator.GetPactScore(proposingKingdom, k).ResultNumber)
+            .FirstOrDefault();
+
+            if (proposedKingdom != null)
             {
                 LogFactory.Get<DiplomaticAgreementBehavior>()
-                    .LogTrace($"[{CampaignTime.Now}] {proposingKingdom.Name} decided to form a NAP with {proposedKingdom.Name}.");
-                FormNonAggressionPactAction.Apply(proposingKingdom, proposedKingdom);
-            }
-        }
+                    .LogTrace($"[{CampaignTime.Now}] {proposingKingdom.Name} proposed a NAP to {proposedKingdom.Name}.");
 
-        private void ConsiderBreakingNonAggressionPacts(Kingdom kingdom)
-        {
-            var pacts = DiplomaticAgreementManager.GetPacts(kingdom);
-            foreach (var pact in pacts)
-            {
-                var otherKingdom = pact.GetOtherKingdom(kingdom);
-                if (new WarAndAiTweaks.BreakNonAggressionPactScoringModel().ShouldTakeAction(kingdom, otherKingdom))
-                {
-                    // This logic now resides in your new Actions folder
-                    Diplomacy.Actions.BreakNonAggressionPactAction.Apply(kingdom, otherKingdom);
-                    // After breaking a pact, re-evaluate later.
-                    return;
-                }
+                // Diplomacy’s built-in action
+                FormNonAggressionPactAction.Apply(proposingKingdom, proposedKingdom);
             }
         }
 

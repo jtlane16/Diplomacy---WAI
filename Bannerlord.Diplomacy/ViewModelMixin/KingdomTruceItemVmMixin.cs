@@ -208,8 +208,8 @@ namespace Diplomacy.ViewModelMixin
             NonAggressionPactInfluenceCost = (int) nonAggressionPactCost.InfluenceCost.Value;
             NonAggressionPactGoldCost = (int) nonAggressionPactCost.GoldCost.Value;
 
-            var allianceScore = new WarAndAiTweaks.AllianceScoringModel().GetScore(_faction2, _faction1, true);
-            var napScore = new WarAndAiTweaks.NonAggressionPactScoringModel().GetScore(_faction2, _faction1, true);
+            var allianceScore = new WarAndAiTweaks.AI.AllianceScoringModel().GetAllianceScore(_faction2, _faction1);
+            var napScore = new WarAndAiTweaks.AI.NonAggressionPackedScoringModel().GetPactScore(_faction2, _faction1);
             AllianceScoreHint = UpdateDiplomacyTooltip(allianceScore);
             NonAggressionPactScoreHint = UpdateDiplomacyTooltip(napScore);
         }

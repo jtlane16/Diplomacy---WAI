@@ -21,8 +21,6 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 using TaleWorlds.ObjectSystem;
 
-using WarAndAiTweaks;
-
 namespace Diplomacy.WarExhaustion
 {
     internal sealed partial class WarExhaustionManager
@@ -770,15 +768,6 @@ namespace Diplomacy.WarExhaustion
                 if ((warResult == WarResult.Loss || warResult == WarResult.Tie) && IsValidQuestState(kingdom, enemyKingdom))
                 {
                     keyList.Add(key);
-
-                    // START: ADDED CODE
-                    // Generate and display the reasoning for peace due to war exhaustion.
-                    float ourExhaustion = WarExhaustionManager.Instance?.GetWarExhaustion(kingdom, enemyKingdom) ?? 0f;
-                    PeaceScoreBreakdown breakdown = DiplomacyHelpers.ComputePeaceScore(kingdom, enemyKingdom, ourExhaustion);
-                    string reason = DiplomacyHelpers.GeneratePeaceReasoning(kingdom, breakdown);
-                    InformationManager.DisplayMessage(new InformationMessage(reason, Colors.Green));
-                    // END: ADDED CODE
-
                     logger.LogTrace($"[{CampaignTime.Now}] {kingdom.Name}, due to max war exhaustion, will peace out with {enemyKingdom.Name}.");
                     KingdomPeaceAction.ApplyPeace(kingdom, enemyKingdom);
                 }

@@ -5,8 +5,6 @@ using Microsoft.Extensions.Logging;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Localization;
 
-using WarAndAiTweaks;
-
 namespace Diplomacy.DiplomaticAction.WarPeace.Conditions
 {
     class HasEnoughInfluenceForWarCondition : AbstractCostCondition

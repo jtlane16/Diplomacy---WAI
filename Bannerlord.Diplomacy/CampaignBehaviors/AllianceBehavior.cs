@@ -120,7 +120,7 @@ namespace Diplomacy.CampaignBehaviors
 
             foreach (var potentialAlly in potentialAllies)
             {
-                if (new WarAndAiTweaks.AllianceScoringModel().ShouldTakeActionBidirectional(kingdom, potentialAlly))
+                if (new WarAndAiTweaks.AI.AllianceScoringModel().ShouldTakeActionBidirectional(kingdom, potentialAlly))
                 {
                     DeclareAllianceAction.Apply(kingdom, potentialAlly);
                     // After forming one alliance, the kingdom should re-evaluate its position later.
@@ -138,7 +138,7 @@ namespace Diplomacy.CampaignBehaviors
             foreach (var alliedKingdom in alliedKingdoms)
             {
                 if (BreakAllianceConditions.Instance.CanApply(kingdom, alliedKingdom)
-                    && new WarAndAiTweaks.BreakAllianceScoringModel().ShouldTakeAction(kingdom, alliedKingdom))
+                    && new WarAndAiTweaks.AI.BreakAllianceScoringModel().ShouldBreakAlliance(kingdom, alliedKingdom))
                 {
                     BreakAllianceAction.Apply(kingdom, alliedKingdom);
                     // After breaking an alliance, the kingdom should re-evaluate its position later.

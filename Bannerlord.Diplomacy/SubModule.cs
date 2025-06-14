@@ -21,7 +21,7 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 using TaleWorlds.MountAndBlade;
 
-using WarAndAiTweaks;
+using WarAndAiTweaks.AI.Behaviors;
 
 namespace Diplomacy
 {
@@ -111,9 +111,7 @@ namespace Diplomacy
                 gameStarter.AddBehavior(new ExpansionismBehavior());
                 gameStarter.AddBehavior(new CivilWarBehavior());
                 gameStarter.AddBehavior(new UIBehavior());
-
-                gameStarter.AddBehavior(new WarAndAiTweaks.StrategicAIBehavior());
-                gameStarter.AddBehavior(new DiplomacyBehavior());
+                gameStarter.AddBehavior(new StrategicAICampaignBehavior());
 
                 var currentKingdomDecisionPermissionModel = GetGameModel<KingdomDecisionPermissionModel>(gameStarterObject);
                 if (currentKingdomDecisionPermissionModel is null)

@@ -1,14 +1,18 @@
 ﻿
+using Diplomacy.Extensions;
+
 using System;
 using System.Linq;
+
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.Localization;
-using TWMathF = TaleWorlds.Library.MathF;
-using Diplomacy.Extensions;
-using TaleWorlds.CampaignSystem.Settlements;
+
 using static WarAndAiTweaks.AI.StrategicAI;
+
+using TWMathF = TaleWorlds.Library.MathF;
 
 
 #if !DIPOLOMACY_EXTENSIONS
@@ -74,6 +78,8 @@ namespace WarAndAiTweaks.AI
             float relScore = (TWMathF.Clamp(relation, -100f, 100f) + 100f) * 0.5f;
             en.Add(relScore * RelationsWeight / TotalWeight, new TextObject("relations"));
 
+            AIComputationLogger.LogAllianceCandidate(proposer, candidate, en.ResultNumber);
+
             return en;
         }
 
@@ -107,6 +113,8 @@ namespace WarAndAiTweaks.AI
 
             float recovery = p.GetCasualties() / (p.TotalStrength + 1f);
             en.Add(recovery * 100f * RecoveryWeight / Total, new TextObject("recovery"));
+
+            AIComputationLogger.LogPactCandidate(p, c, en.ResultNumber);
 
             return en;
         }

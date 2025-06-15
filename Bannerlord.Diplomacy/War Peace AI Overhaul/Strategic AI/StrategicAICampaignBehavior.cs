@@ -10,18 +10,22 @@ using static WarAndAiTweaks.AI.StrategicAI;
 namespace WarAndAiTweaks.AI.Behaviors
 {
     /// <summary>
-    /// Persists peace-days per kingdom and invokes StrategicAI daily.
+    /// Persists peace-days and war-days per kingdom and invokes StrategicAI daily.
     /// </summary>
     public class StrategicAICampaignBehavior : CampaignBehaviorBase
     {
         [SaveableField(1002)]
         private Dictionary<string, int> _peaceDays = new Dictionary<string, int>();
+
+        [SaveableField(1003)]
+        private Dictionary<string, int> _warDays = new Dictionary<string, int>();
+
         private IWarEvaluator _warEvaluator = new StrategicAI.DefaultWarEvaluator();
         private IPeaceEvaluator _peaceEvaluator = new StrategicAI.DefaultPeaceEvaluator();
 
         public override void RegisterEvents()
         {
-            // Fires once per in-game day without parameters
+            // Fires once per in-game day
             CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
         }
 
@@ -30,27 +34,45 @@ namespace WarAndAiTweaks.AI.Behaviors
             foreach (var kingdom in Kingdom.All.ToList())
             {
                 if (kingdom.IsEliminated) continue;
-                // skip player's own kingdom
                 if (Clan.PlayerClan.Kingdom == kingdom) continue;
 
-                if (!_peaceDays.ContainsKey(kingdom.StringId))
-                    _peaceDays[kingdom.StringId] = 0;
-
+                var id = kingdom.StringId;
                 bool atWar = FactionManager.GetEnemyKingdoms(kingdom).Any();
-                _peaceDays[kingdom.StringId] = atWar ? 0 : _peaceDays[kingdom.StringId] + 1;
+
+                if (!_peaceDays.ContainsKey(id))
+                    _peaceDays[id] = 0;
+                if (!_warDays.ContainsKey(id))
+                    _warDays[id] = 0;
+
+                if (atWar)
+                {
+                    _warDays[id]++;
+                    _peaceDays[id] = 0;
+                }
+                else
+                {
+                    _peaceDays[id]++;
+                    _warDays[id] = 0;
+                }
 
                 var ai = new StrategicAI(kingdom, _warEvaluator, _peaceEvaluator)
                 {
-                    DaysSinceLastWar = _peaceDays[kingdom.StringId]
+                    DaysSinceLastWar = _peaceDays[id],
+                    DaysAtWar = _warDays[id]    // now valid
                 };
+
                 ai.TickDaily();
-                _peaceDays[kingdom.StringId] = ai.DaysSinceLastWar;
+
+                // Persist any changes back
+                _peaceDays[id] = ai.DaysSinceLastWar;
+                _warDays[id] = ai.DaysAtWar;
             }
         }
 
         public override void SyncData(IDataStore dataStore)
         {
             dataStore.SyncData("_peaceDays", ref _peaceDays);
+            dataStore.SyncData("_warDays", ref _warDays);
         }
     }
 }

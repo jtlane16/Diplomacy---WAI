@@ -24,6 +24,8 @@ using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
+using WarAndAiTweaks.AI;
+
 namespace Diplomacy.DiplomaticAction.WarPeace
 {
     internal sealed class KingdomPeaceAction
@@ -35,22 +37,16 @@ namespace Diplomacy.DiplomaticAction.WarPeace
 
         private const string _leaderDefeatedWithFiefs = "{=vLfbqXjq}Your armies and people are exhausted from the conflict with {ENEMY_KINGDOM} and have given up the fight. You must accept the terms of defeat and pay war reparations in the amount of {REPARATIONS}{GOLD_ICON}. These expenses will be distributed among all the clans of the kingdom.{?ADD_TRIBUTE}You also pledge to pay a daily tribute of {TRIBUTE}{GOLD_ICON}.{?}{\\?}{?FIEFS_TO_RETURN_LIST.ANY}{NEW_LINE} {NEW_LINE}On top of that, you have to return {FIEFS_TO_RETURN_LIST.START}{?FIEFS_TO_RETURN_LIST.IS_PLURAL} and {?}{\\?}{FIEFS_TO_RETURN_LIST.END} back to {ENEMY_KINGDOM}.{NEW_LINE} {NEW_LINE}{?} {\\?}The shame of defeat will cost you {INFLUENCE} influence.";
         private const string _leaderDefeatedWithNoFiefs = "{=ghZCj7hb}With your final stronghold falling to your enemies, you can no longer continue the fight with {ENEMY_KINGDOM}. You must accept the terms of defeat{?TO_BE_DESTROYED}. Without land or livelihood, your kingdom is no more.{?} and pay war reparations in the amount of {REPARATIONS}{GOLD_ICON}. These expenses will be distributed among all the clans of the kingdom. {?ADD_TRIBUTE}You also pledge to pay a daily tribute of {TRIBUTE}{GOLD_ICON}. {?}{\\?}The shame of defeat will cost you {INFLUENCE} influence.{\\?}";
-
         private const string _vassalDefeatedWithFiefs = "{=cKV5Jded}The armies and people of {KINGDOM.NAME} are exhausted from the conflict with {ENEMY_KINGDOM} and have given up the fight. {KINGDOM_LEADER.NAME} must accept the terms of defeat and pay war reparations in the amount of {REPARATIONS}{GOLD_ICON} (these expenses will be distributed among all the clans of the kingdom).{?ADD_TRIBUTE}{?KINGDOM_LEADER.GENDER}She{?}He{\\?} also pledges to pay a daily tribute of {TRIBUTE}{GOLD_ICON}.{?}{\\?}{?FIEFS_TO_RETURN_LIST.ANY}{NEW_LINE} {NEW_LINE}On top of that, {KINGDOM_LEADER.NAME} has to return {FIEFS_TO_RETURN_LIST.START}{?FIEFS_TO_RETURN_LIST.IS_PLURAL} and {?}{\\?}{FIEFS_TO_RETURN_LIST.END} back to {ENEMY_KINGDOM}.{NEW_LINE} {NEW_LINE}{?} {\\?}The shame of defeat will cost {?KINGDOM_LEADER.GENDER}her{?}him{\\?} {INFLUENCE} influence.";
         private const string _vassalDefeatedWithNoFiefs = "{=idAcjzXB}With your final stronghold falling to your enemies, you can no longer continue the fight with {ENEMY_KINGDOM}. {KINGDOM_LEADER.NAME} must accept the terms of defeat{?TO_BE_DESTROYED}Without land or livelihood, your kingdom is no more.{?} and pay war reparations in the amount of {REPARATIONS}{GOLD_ICON} (these expenses will be distributed among all the clans of the kingdom). {?ADD_TRIBUTE}{?KINGDOM_LEADER.GENDER}She{?}He{\\?} also pledges to pay a daily tribute of {TRIBUTE}{GOLD_ICON}. {?}{\\?}The shame of defeat will cost {?KINGDOM_LEADER.GENDER}her{?}him{\\?} {INFLUENCE} influence.{\\?}";
-
         private const string _defeatedByRebellion = "{=6eTtSKO4}In the light of recent events, it is clear that the rebellion called {REBEL_KINGDOM} has been successful and further resistance is futile. It's time to admit defeat{?TO_BE_DESTROYED}, even though without land or livelihood your kingdom would be no more{?} and give your divided, war-torn kingdom a chance to live in peace{\\?}.";
         private const string _rebellionDefeated = "{=2ptArJem}In the light of recent events, it is clear that your rebellion has failed. It's time to admit defeat and give the divided, war-weary {ORIGINAL_KINGDOM} a chance to reunite.";
-
         private const string _tieMessage = "{=a3W5zKQr}The armies and people of both {KINGDOM.NAME} and {ENEMY_KINGDOM} are exhausted from the conflict and have given up the fight. There is no other choice but to make peace{?TO_BE_DESTROYED}, but without land or livelihood, {?IS_REBELLION}your rebellion is over{?}your kingdom is no more{\\?}{?}{\\?}.";
-
         private const string _peaceProposalWithFiefs = "{=HWiDa4R1}The armies and people of {KINGDOM.NAME} are exhausted from the conflict with {PLAYER_KINGDOM} and have given up the fight.{NEW_LINE} {NEW_LINE}{KINGDOM_LEADER.NAME} is proposing a peace treaty and is willing to pay war reparations in the amount of {REPARATIONS}{GOLD_ICON}.{?ADD_TRIBUTE}{?KINGDOM_LEADER.GENDER}She{?}He{\\?} also pledges to pay a daily tribute of {TRIBUTE}{GOLD_ICON}.{?}{\\?}{?FIEFS_TO_RETURN_LIST.ANY}{NEW_LINE} {NEW_LINE}On top of that, {KINGDOM_LEADER.NAME} has to return {FIEFS_TO_RETURN_LIST.START}{?FIEFS_TO_RETURN_LIST.IS_PLURAL} and {?}{\\?}{FIEFS_TO_RETURN_LIST.END} back to {PLAYER_KINGDOM}.{?}{\\?}";
         private const string _peaceProposalWithNoFiefs = "{=t0ZS9maD}With their final stronghold falling, {KINGDOM.LINK} can no longer continue the fight with {PLAYER_KINGDOM}.{NEW_LINE} {NEW_LINE}{KINGDOM_LEADER.NAME} proposes a peace treaty{?TO_BE_DESTROYED}, despite the fact that without land or livelihood, their kingdom would cease to exist.{?} and is willing to pay war reparations in the amount of {REPARATIONS}{GOLD_ICON}.{?ADD_TRIBUTE} {?KINGDOM_LEADER.GENDER}She{?}He{\\?} also pledges to pay a daily tribute of {TRIBUTE}{GOLD_ICON}.{?}{\\?}{\\?}";
         private const string _peaceProposalWhenTie = "{=ZrwszZww}The armies and people of both {KINGDOM.NAME} and {PLAYER_KINGDOM} are exhausted from the conflict and have given up the fight. {NEW_LINE} {NEW_LINE}{KINGDOM_LEADER.NAME} is proposing a peace treaty{?TO_BE_DESTROYED}, even though without land or livelihood, {?IS_REBELLION}their rebellion is practically over{?}their kingdom would be no more{\\?}{?} without putting forward any conditions{\\?}.";
-
         private const string _peaceProposalFromRebels = "{=q02T8cyI}In the light of recent events, it is clear that the rebellion called {REBEL_KINGDOM} has failed. Is it time to accept their pleas for peace and forgiveness, thus giving your divided, war-weary kingdom a chance to be reunited?";
         private const string _peaceProposalFromOriginalKingdom = "{=PC5GdgKA}In the light of recent events, it is clear that your rebellion against {ORIGINAL_KINGDOM.NAME} is a success - even {ORIGINAL_KINGDOM_LEADER.NAME} admitted it! Is it time to accept their plea for peace, thus achieveing your goals?";
-
         private const string _noChoice = "{=13G0c8RE}Given how badly your kingdom has been ravaged by the war, you have no choice but to accept the peace.";
 
         private static void ApplyPeaceInternal(Kingdom kingdomMakingPeace, Kingdom otherKingdom, bool isATie, bool skipPlayerPrompts, HybridCost diplomacyCost, int dailyPeaceTributeToPay, List<Town> fiefsToBeReturned, bool hasFiefsRemaining, EliminationOnPeace shouldBeDestroyed)
@@ -146,12 +142,22 @@ namespace Diplomacy.DiplomaticAction.WarPeace
             diplomacyCost.ApplyCost();
             DoReturnFiefs(kingdomMakingPeace, otherKingdom, fiefsToBeReturned);
             MakePeaceAction.Apply(kingdomMakingPeace, otherKingdom, dailyPeaceTributeToPay);
+
+            // FIX: Added logic to display custom peace notification for AI vs AI peace.
+            if (!kingdomMakingPeace.Leader.IsHumanPlayerCharacter && !otherKingdom.Leader.IsHumanPlayerCharacter)
+            {
+                var peaceEvaluator = new StrategicAI.DefaultPeaceEvaluator();
+                string note = DiplomacyReasoning.PeaceNotification(kingdomMakingPeace, otherKingdom, peaceEvaluator);
+                InformationManager.DisplayMessage(new InformationMessage(note, SubModule.StdTextColor));
+            }
+
             if (shouldBeDestroyed.KingdomMakingPeace) SoftlyDestroyKingdomAction.Apply(kingdomMakingPeace);
             if (shouldBeDestroyed.OtherKingdom) SoftlyDestroyKingdomAction.Apply(otherKingdom);
 
             DoLogging(kingdomMakingPeace, otherKingdom, diplomacyCost, dailyPeaceTributeToPay);
         }
 
+        //... (rest of the file is the same)
         private static void DoLogging(Kingdom kingdomMakingPeace, Kingdom otherKingdom, HybridCost diplomacyCost, int dailyPeaceTributeToPay)
         {
             var goldCost = diplomacyCost.GoldCost.Value;

@@ -8,11 +8,15 @@ using Diplomacy.Models;
 using Diplomacy.PatchTools;
 using Diplomacy.Widgets;
 
+using HarmonyLib;
+
 using Microsoft.Extensions.Logging;
 
 using Serilog.Events;
 
+using System;
 using System.Linq;
+using System.Windows;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.ComponentInterfaces;
@@ -64,6 +68,17 @@ namespace Diplomacy
             PatchManager.ApplyMainPatches(MainHarmonyDomain);
 
             WidgetFactoryManager.Register(typeof(CriticalThresholdTextWidget));
+
+            base.OnSubModuleLoad();
+            try
+            {
+                new Harmony("mod.octavius.bannerlord").PatchAll();
+            }
+            catch (Exception e)
+            {
+               InformationManager.DisplayMessage(new InformationMessage($"Couldn't apply Harmony due to: {e}", Colors.Red));
+                Log.LogError($"Couldn't apply Harmony due to: {e}");
+            }
         }
 
         protected override void OnSubModuleUnloaded()

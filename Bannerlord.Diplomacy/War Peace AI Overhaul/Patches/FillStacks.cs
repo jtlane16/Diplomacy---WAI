@@ -20,7 +20,7 @@ namespace WarAndAiTweaks
 			if (!__instance.IsLordParty) { return; }
 			if (__instance.LeaderHero.Clan.IsUnderMercenaryService) { return; }
 
-			troopNumberLimit = 3;
+			troopNumberLimit = 1;
 		}
 	}
 

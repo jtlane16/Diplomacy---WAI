@@ -231,7 +231,7 @@ namespace WarAndAiTweaks.AI
             private const float EconomyWeight = 20f;
             private const float WarWeaknessWeight = 20f;
             private const float SharedBorderBonus = 30f;
-            private const float NoSharedBorderPenalty = -50f;
+            private const float NoSharedBorderPenalty = -200;
 
             public ExplainedNumber GetWarScore(Kingdom a, Kingdom b)
             {

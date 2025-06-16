@@ -70,15 +70,6 @@ namespace Diplomacy
             WidgetFactoryManager.Register(typeof(CriticalThresholdTextWidget));
 
             base.OnSubModuleLoad();
-            try
-            {
-                new Harmony("mod.octavius.bannerlord").PatchAll();
-            }
-            catch (Exception e)
-            {
-               InformationManager.DisplayMessage(new InformationMessage($"Couldn't apply Harmony due to: {e}", Colors.Red));
-                Log.LogError($"Couldn't apply Harmony due to: {e}");
-            }
         }
 
         protected override void OnSubModuleUnloaded()

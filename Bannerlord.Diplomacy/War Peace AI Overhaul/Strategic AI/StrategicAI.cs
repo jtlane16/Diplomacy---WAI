@@ -17,17 +17,6 @@ using Diplomacy.WarExhaustion;
 
 namespace WarAndAiTweaks.AI
 {
-#if !DIPOLOMACY_EXTENSIONS
-    internal static class DiplomacyFallbackExtensions
-    {
-        public static bool IsAlliedWithFaction(this Kingdom _, Kingdom __) => false;
-        public static bool HasNonAggressionPact(this Kingdom _, Kingdom __) => false;
-        public static float GetRelation(this Kingdom _, Kingdom __) => 0f;
-        public static float GetCasualties(this Kingdom _) => 0f;
-        public static bool IsBorderSettlementWith(this Settlement s, Kingdom other) => false;
-    }
-#endif
-
     public sealed class StrategicAI
     {
         private readonly Kingdom _owner;

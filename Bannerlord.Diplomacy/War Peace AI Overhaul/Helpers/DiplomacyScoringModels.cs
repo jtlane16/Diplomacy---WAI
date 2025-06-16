@@ -24,8 +24,21 @@ internal static class DiplomacyFallbackExtensions
     // Naive border detection: settlements within threshold distance
     public static bool IsBorderSettlementWith(this Settlement s, Kingdom other)
     {
-        const float Threshold = 15000f;
-        return other.Settlements.Any(o => s.Position2D.Distance(o.Position2D) <= Threshold);
+        // A list of all towns and castles in the game, filtering out villages.
+        var allTownsAndCastles = Campaign.Current.Settlements
+            .Where(settlement => settlement.IsTown || settlement.IsCastle)
+            .ToList();
+
+        var homeKingdom = s.OwnerClan.Kingdom;
+
+        // Find the 3 closest towns or castles to the settlement 's', excluding any from the same kingdom.
+        var closestForeignSettlements = allTownsAndCastles
+            .Where(settlement => settlement.OwnerClan.Kingdom != homeKingdom)
+            .OrderBy(settlement => s.Position2D.Distance(settlement.Position2D))
+            .Take(3);
+
+        // Check if any of these 3 closest foreign settlements belong to the 'other' kingdom.
+        return closestForeignSettlements.Any(closestSettlement => closestSettlement.OwnerClan.Kingdom == other);
     }
 }
 #endif
@@ -37,11 +50,7 @@ namespace WarAndAiTweaks.AI
     {
         public static bool BordersWith(Settlement s, Kingdom other)
         {
-#if BANNERLORD_11
             return s.IsBorderSettlementWith(other);
-#else
-            return false; // placeholder when API not available
-#endif
         }
     }
 

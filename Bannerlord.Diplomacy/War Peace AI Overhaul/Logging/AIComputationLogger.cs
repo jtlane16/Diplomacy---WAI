@@ -15,6 +15,24 @@ namespace WarAndAiTweaks.AI
         private static readonly string LogFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ai_computation.log");
         private static readonly object _sync = new object();
 
+        /// <summary>
+        /// Clears the entire log file.
+        /// </summary>
+        public static void ClearLog()
+        {
+            try
+            {
+                lock (_sync)
+                {
+                    File.WriteAllText(LogFile, string.Empty);
+                }
+            }
+            catch
+            {
+                // Suppress IO errors
+            }
+        }
+
         private static void WriteLine(string line)
         {
             try
@@ -75,10 +93,10 @@ namespace WarAndAiTweaks.AI
         }
 
         // Replace the old LogWarCandidate method with this new one
-        public static void LogWarCandidate(Kingdom owner, Kingdom target, float baseScore, float warDesire, float peaceDesire, float totalScore, ExplainedNumber explainedScore)
+        public static void LogWarCandidate(Kingdom owner, Kingdom target, float baseScore, float warDesire, float peaceDesire, float recentPeacePenalty, float totalScore, ExplainedNumber explainedScore)
         {
             var details = FormatExplainedNumber(explainedScore);
-            WriteLine($"{DateTime.UtcNow:o},WAR_CANDIDATE,{owner.StringId},{target.StringId},{baseScore:F2},{warDesire:F2},{peaceDesire:F2},{totalScore:F2},\"{details}\"");
+            WriteLine($"{DateTime.UtcNow:o},WAR_CANDIDATE,{owner.StringId},{target.StringId},{baseScore:F2},{warDesire:F2},{peaceDesire:F2},{recentPeacePenalty:F2},{totalScore:F2},\"{details}\"");
         }
 
         public static void LogWarDecision(Kingdom owner, Kingdom target, float chosenScore)

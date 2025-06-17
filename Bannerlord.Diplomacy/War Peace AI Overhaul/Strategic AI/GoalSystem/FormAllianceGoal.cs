@@ -13,8 +13,8 @@ namespace WarAndAiTweaks.AI.Goals
         public Kingdom OtherKingdom { get; }
 
         // Constants and logic taken directly from your DiplomacyScoringModels.cs
-        private const float SharedEnemyWeight = 60f;
-        private const float StrengthSynergyWeight = 35f;
+        private const float SharedEnemyWeight = 75f;
+        private const float StrengthSynergyWeight = 20f;
         private const float RelationsWeight = 5f;
         private const float TotalWeight = SharedEnemyWeight + StrengthSynergyWeight + RelationsWeight;
 

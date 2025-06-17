@@ -31,8 +31,8 @@ namespace Diplomacy.War_Peace_AI_Overhaul
 
 			if (effect == BuildingEffectEnum.Militia && __instance.Name.ToString() == "Militia Grounds")
 			{
-				if (__instance.Town.IsCastle) { __result = __result + 10; }
-				if (__instance.Town.IsTown) { __result = __result + 20; }
+				if (__instance.Town.IsCastle) { __result = __result + 5; }
+				if (__instance.Town.IsTown) { __result = __result + 10; }
 			}
 			return;
 		}

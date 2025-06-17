@@ -27,6 +27,9 @@ namespace Diplomacy
         [UsedImplicitly]
         private Dictionary<string, CampaignTime> _lastAllianceFormedTime;
 
+        [SaveableField(4)]
+        private Dictionary<Kingdom, CampaignTime> _lastPeaceTime;
+
         private static float MinimumDaysBetweenPeaceProposals => 5f;
 
         internal CooldownManager()
@@ -34,6 +37,7 @@ namespace Diplomacy
             _lastWarTime = new Dictionary<string, CampaignTime>();
             _lastPeaceProposalTime = new Dictionary<Kingdom, CampaignTime>();
             _lastAllianceFormedTime = new Dictionary<string, CampaignTime>();
+            _lastPeaceTime = new Dictionary<Kingdom, CampaignTime>();
             Instance = this;
         }
         public void UpdateLastPeaceProposalTime(Kingdom kingdom, CampaignTime campaignTime)
@@ -45,6 +49,22 @@ namespace Diplomacy
         {
             var key = CreateKey(kingdom1, kingdom2);
             _lastAllianceFormedTime[key] = campaignTime;
+        }
+
+        public void UpdateLastPeaceTime(Kingdom kingdom)
+        {
+            _lastPeaceTime[kingdom] = CampaignTime.Now;
+        }
+
+        public static bool GetDaysSinceLastPeace(Kingdom kingdom, out float elapsedDays)
+        {
+            if (Instance!._lastPeaceTime.TryGetValue(kingdom, out var lastPeaceTime))
+            {
+                elapsedDays = lastPeaceTime.ElapsedDaysUntilNow;
+                return true;
+            }
+            elapsedDays = float.MaxValue;
+            return false;
         }
 
         public static bool HasBreakAllianceCooldown(Kingdom kingdom1, Kingdom kingdom2, out float elapsedDaysUntilNow)
@@ -130,6 +150,10 @@ namespace Diplomacy
         internal void Sync()
         {
             Instance = this;
+            if (_lastPeaceTime == null)
+            {
+                _lastPeaceTime = new();
+            }
         }
     }
 }

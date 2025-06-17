@@ -143,6 +143,9 @@ namespace Diplomacy.DiplomaticAction.WarPeace
             DoReturnFiefs(kingdomMakingPeace, otherKingdom, fiefsToBeReturned);
             MakePeaceAction.Apply(kingdomMakingPeace, otherKingdom, dailyPeaceTributeToPay);
 
+            CooldownManager.Instance!.UpdateLastPeaceTime(kingdomMakingPeace);
+            CooldownManager.Instance!.UpdateLastPeaceTime(otherKingdom);
+
             // FIX: Added logic to display custom peace notification for AI vs AI peace.
             if (!kingdomMakingPeace.Leader.IsHumanPlayerCharacter && !otherKingdom.Leader.IsHumanPlayerCharacter)
             {

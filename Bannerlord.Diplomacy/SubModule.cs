@@ -25,6 +25,7 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 using TaleWorlds.MountAndBlade;
 
+using WarAndAiTweaks.AI;
 using WarAndAiTweaks.AI.Behaviors;
 
 namespace Diplomacy
@@ -62,14 +63,15 @@ namespace Diplomacy
             // Configure the separate AI log
             this.AddSerilogLoggerProvider("Diplomacy_AI.log", new[] { "WarAndAiTweaks.*" }, config => config.MinimumLevel.Is(LogEventLevel.Information));
 
+            // Clear the AI log on every game load
+            AIComputationLogger.ClearLog();
+
             Log = LogFactory.Get<SubModule>();
             Log.LogInformation($"Loading {Name} {Version}...");
 
             PatchManager.ApplyMainPatches(MainHarmonyDomain);
 
             WidgetFactoryManager.Register(typeof(CriticalThresholdTextWidget));
-
-            base.OnSubModuleLoad();
         }
 
         protected override void OnSubModuleUnloaded()

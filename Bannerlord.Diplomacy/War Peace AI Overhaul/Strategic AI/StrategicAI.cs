@@ -2,6 +2,7 @@
 using Diplomacy.DiplomaticAction;
 using Diplomacy.DiplomaticAction.WarPeace;
 using Diplomacy.Extensions;
+using Diplomacy.WarExhaustion;
 
 using System;
 using System.Collections.Generic;
@@ -69,11 +70,11 @@ namespace WarAndAiTweaks.AI
                     break;
                 case GoalType.FormAlliance:
                     var formAllianceGoal = _currentGoal as FormAllianceGoal;
-                    if (formAllianceGoal != null && formAllianceGoal.Priority > 50)
+                    if (formAllianceGoal != null && formAllianceGoal.Priority > 60)
                     {
                         // NEW: Check if the other kingdom also wants an alliance
                         var otherKingdomsGoal = GoalEvaluator.GetHighestPriorityGoal(formAllianceGoal.OtherKingdom, 0, 0);
-                        if (otherKingdomsGoal is FormAllianceGoal otherAllianceGoal && otherAllianceGoal.OtherKingdom == this._owner && otherAllianceGoal.Priority > 50)
+                        if (otherKingdomsGoal is FormAllianceGoal otherAllianceGoal && otherAllianceGoal.OtherKingdom == this._owner && otherAllianceGoal.Priority > 60)
                         {
                             Diplomacy.DiplomaticAction.Alliance.DeclareAllianceAction.Apply(this._owner, formAllianceGoal.OtherKingdom);
                         }
@@ -135,34 +136,29 @@ namespace WarAndAiTweaks.AI
             }
 
             var enemy = goal.PeaceCandidate;
+            float peaceScore = goal.Priority; // The goal's priority IS the peace score.
 
-            int daysWar = _daysAtWar.TryGetValue(_owner, out var d) ? d : 0;
-            float ramp = TWMathF.Clamp(daysWar / PEACE_RAMP_DAYS, 0f, 1f);
-            float peaceScore = goal.Priority * ramp;
+            if (peaceScore < PEACE_SCORE_THRESHOLD) return;
 
-            if (peaceScore >= PEACE_SCORE_THRESHOLD)
+            bool enemyIsPlayer = enemy.RulingClan == Hero.MainHero.Clan;
+            bool enemyAIAgrees = false;
+
+            if (!enemyIsPlayer)
             {
-                bool enemyIsPlayer = enemy.RulingClan == Hero.MainHero.Clan;
-                bool enemyAIAgrees = false;
+                // Check if the enemy is also receptive to peace.
+                var enemySurviveGoal = new SurviveGoal(enemy, _peaceEvaluator);
+                enemySurviveGoal.EvaluatePriority();
 
-                if (!enemyIsPlayer)
+                if (enemySurviveGoal.Priority >= PEACE_SCORE_THRESHOLD)
                 {
-                    var enemyGoal = GoalEvaluator.GetHighestPriorityGoal(enemy, 0, daysWar);
-                    if (enemyGoal is SurviveGoal enemySurviveGoal)
-                    {
-                        float enemyPeaceScore = enemySurviveGoal.Priority * ramp;
-                        if (enemyPeaceScore >= PEACE_SCORE_THRESHOLD)
-                        {
-                            enemyAIAgrees = true;
-                        }
-                    }
+                    enemyAIAgrees = true;
                 }
+            }
 
-                if (enemyIsPlayer || enemyAIAgrees)
-                {
-                    KingdomPeaceAction.ApplyPeace(_owner, enemy);
-                    AIComputationLogger.LogPeaceDecision(_owner, enemy, peaceScore);
-                }
+            if (enemyIsPlayer || enemyAIAgrees)
+            {
+                KingdomPeaceAction.ApplyPeace(_owner, enemy);
+                AIComputationLogger.LogPeaceDecision(_owner, enemy, peaceScore);
             }
         }
 
@@ -288,18 +284,38 @@ namespace WarAndAiTweaks.AI
 
         public class DefaultPeaceEvaluator : IPeaceEvaluator
         {
+            private const float CasualtiesWeight = 30f;
+            private const float WarExhaustionWeight = 40f;
+            private const float WarDurationWeight = 20f;
+            private const float FiefLossWeight = 10f;
+
             public ExplainedNumber GetPeaceScore(Kingdom k, Kingdom enemy)
             {
                 var explainedNumber = new ExplainedNumber(0f, true);
+                var stance = k.GetStanceWith(enemy);
+                if (stance == null || !stance.IsAtWar) return explainedNumber;
 
-                float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
-                explainedNumber.Add(casualtiesRatio * 400f, new TextObject("Casualties"));
+                // War Duration
+                var daysAtWar = stance.WarStartDate.ElapsedDaysUntilNow;
+                float warDurationFactor = Math.Min(daysAtWar / 180f, 1.0f); // scales up to ~6 months
+                explainedNumber.Add(warDurationFactor * 100f * (WarDurationWeight / 100f), new TextObject("{=XIPMI3gR}War Duration"));
 
-                bool multiFront = FactionManager.GetEnemyKingdoms(k).Count() > 1;
-                if (multiFront)
+                // War Exhaustion (if enabled)
+                if (Settings.Instance!.EnableWarExhaustion && WarExhaustionManager.Instance is { } wem)
                 {
-                    explainedNumber.Add(30f, new TextObject("Multi-Front War"));
+                    float exhaustion = wem.GetWarExhaustion(k, enemy);
+                    explainedNumber.Add(exhaustion * (WarExhaustionWeight / 100f), new TextObject("{=V542tneW}War Exhaustion"));
                 }
+                else // Fallback to casualties if exhaustion is disabled
+                {
+                    float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
+                    explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("Casualties"));
+                }
+
+                // Fiefs Lost
+                int fiefsLost = stance.GetSuccessfulSieges(enemy); // Fiefs `k` lost to `enemy`
+                explainedNumber.Add(fiefsLost * 5f * (FiefLossWeight / 100f), new TextObject("{=DrNBDhx3}Fiefs Lost"));
+
                 return explainedNumber;
             }
         }

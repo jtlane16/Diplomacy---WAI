@@ -2,6 +2,7 @@
 using System.Linq;
 
 using TaleWorlds.CampaignSystem;
+using Diplomacy;
 
 using WarAndAiTweaks.AI; // Add this using statement
 
@@ -25,11 +26,28 @@ namespace WarAndAiTweaks.AI.Goals
 
         public override void EvaluatePriority()
         {
+            const float PeaceDesirePenaltyMax = -100f;
+            const float PeaceDesirePenaltyDecayDuration = 30f; // Days
+
             float bestScore = float.MinValue;
             Kingdom? bestTarget = null;
 
             float warDesire = Math.Min(_daysSinceLastWar * MAX_WAR_DESIRE / WAR_DESIRE_RAMP_DAYS, MAX_WAR_DESIRE);
             float peaceDesire = Math.Max(_daysAtWar * MAX_WAR_FATIGUE_PENALTY / WAR_FATIGUE_RAMP_DAYS, MAX_WAR_FATIGUE_PENALTY);
+
+            // Add decaying penalty for being recently at peace.
+            float recentPeacePenalty = 0f;
+            if (!FactionManager.GetEnemyKingdoms(this.Kingdom).Any()) // Only apply if currently at peace
+            {
+                if (CooldownManager.GetDaysSinceLastPeace(this.Kingdom, out var daysSincePeace))
+                {
+                    if (daysSincePeace < PeaceDesirePenaltyDecayDuration)
+                    {
+                        float decayFactor = 1.0f - (daysSincePeace / PeaceDesirePenaltyDecayDuration);
+                        recentPeacePenalty = PeaceDesirePenaltyMax * decayFactor;
+                    }
+                }
+            }
 
             var candidates = Kingdom.All.Where(k =>
                 k != Kingdom &&
@@ -40,10 +58,9 @@ namespace WarAndAiTweaks.AI.Goals
             foreach (var k in candidates)
             {
                 var warScore = _warEvaluator.GetWarScore(Kingdom, k);
-                float finalScore = warScore.ResultNumber + warDesire + peaceDesire;
+                float finalScore = warScore.ResultNumber + warDesire + peaceDesire + recentPeacePenalty;
 
-                // Log every candidate considered for this goal
-                AIComputationLogger.LogWarCandidate(this.Kingdom, k, warScore.ResultNumber, warDesire, peaceDesire, finalScore, warScore);
+                AIComputationLogger.LogWarCandidate(this.Kingdom, k, warScore.ResultNumber, warDesire, peaceDesire, recentPeacePenalty, finalScore, warScore);
 
                 if (finalScore > bestScore)
                 {

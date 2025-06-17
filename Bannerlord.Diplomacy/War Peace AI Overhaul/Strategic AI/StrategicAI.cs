@@ -66,32 +66,40 @@ namespace WarAndAiTweaks.AI
                     ExecuteSurvival(_currentGoal as SurviveGoal);
                     break;
                 case GoalType.Strengthen:
-                    // Does nothing, avoids war.
+                    ExecuteStrengthening();
                     break;
-                case GoalType.FormAlliance:
-                    var formAllianceGoal = _currentGoal as FormAllianceGoal;
-                    if (formAllianceGoal != null && formAllianceGoal.Priority > 60)
-                    {
-                        // NEW: Check if the other kingdom also wants an alliance
-                        var otherKingdomsGoal = GoalEvaluator.GetHighestPriorityGoal(formAllianceGoal.OtherKingdom, 0, 0);
-                        if (otherKingdomsGoal is FormAllianceGoal otherAllianceGoal && otherAllianceGoal.OtherKingdom == this._owner && otherAllianceGoal.Priority > 60)
-                        {
-                            Diplomacy.DiplomaticAction.Alliance.DeclareAllianceAction.Apply(this._owner, formAllianceGoal.OtherKingdom);
-                        }
-                    }
-                    break;
-                case GoalType.FormNonAggressionPact:
-                    var formNapGoal = _currentGoal as FormNapGoal;
-                    if (formNapGoal != null && formNapGoal.Priority > 50)
-                    {
-                        // NEW: Check if the other kingdom also wants a pact
-                        var otherKingdomsGoal = GoalEvaluator.GetHighestPriorityGoal(formNapGoal.OtherKingdom, 0, 0);
-                        if (otherKingdomsGoal is FormNapGoal otherNapGoal && otherNapGoal.OtherKingdom == this._owner && otherNapGoal.Priority > 50)
-                        {
-                            Diplomacy.DiplomaticAction.NonAggressionPact.FormNonAggressionPactAction.Apply(this._owner, formNapGoal.OtherKingdom);
-                        }
-                    }
-                    break;
+            }
+        }
+
+        private void ExecuteStrengthening()
+        {
+            var allianceScoringModel = new WarAndAiTweaks.AI.AllianceScoringModel();
+            var napScoringModel = new WarAndAiTweaks.AI.NonAggressionPactScoringModel();
+
+            // Prioritize alliances first as they are a bigger commitment.
+            var bestAllianceCandidate = Kingdom.All
+                .Where(k => k != _owner && !_owner.IsAtWarWith(k) && !FactionManager.IsAlliedWithFaction(_owner, k))
+                .OrderByDescending(k => allianceScoringModel.GetAllianceScore(_owner, k).ResultNumber)
+                .FirstOrDefault();
+
+            if (bestAllianceCandidate != null && allianceScoringModel.ShouldTakeActionBidirectional(_owner, bestAllianceCandidate, 60f))
+            {
+                Diplomacy.DiplomaticAction.Alliance.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
+                AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
+                return; // Only do one diplomatic action per day.
+            }
+
+            // If no alliance was formed, consider a non-aggression pact.
+            var bestNapCandidate = Kingdom.All
+                .Where(k => k != _owner && !_owner.IsAtWarWith(k) && !FactionManager.IsAlliedWithFaction(_owner, k) && !Diplomacy.DiplomaticAction.DiplomaticAgreementManager.HasNonAggressionPact(_owner, k, out _))
+                .OrderByDescending(k => napScoringModel.GetPactScore(_owner, k).ResultNumber)
+                .FirstOrDefault();
+
+            if (bestNapCandidate != null && napScoringModel.ShouldTakeActionBidirectional(_owner, bestNapCandidate, 50f))
+            {
+                Diplomacy.DiplomaticAction.NonAggressionPact.FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
+                AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
+                return;
             }
         }
 
@@ -193,7 +201,7 @@ namespace WarAndAiTweaks.AI
             private const float DistanceWeight = 30f;
             private const float MaxDistance = 800000f;
             private const float SnowballRatioThreshold = 1.5f;
-            private const float SnowballBonus = 20f;
+            private const float SnowballBonus = 30f;
             private const float TerritoryWeight = 25f;
             private const float AllianceTerritoryWeight = 15f;
             private const float EconomyWeight = 20f;

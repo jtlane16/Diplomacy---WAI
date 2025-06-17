@@ -23,9 +23,6 @@ namespace WarAndAiTweaks.AI.Goals
     {
         Survive,
         Strengthen,
-        Expand,
-        FormAlliance,
-        FormNonAggressionPact,
-        BreakAlliance
+        Expand
     }
 }

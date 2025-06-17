@@ -16,7 +16,7 @@ namespace WarAndAiTweaks.AI
             var warEvaluator = new DefaultWarEvaluator();
             var peaceEvaluator = new DefaultPeaceEvaluator();
 
-            // Start with base goals
+            // ONLY evaluate the three core goals.
             var potentialGoals = new List<AIGoal>
             {
                 new ExpandGoal(kingdom, warEvaluator, daysSinceLastWar, daysAtWar),
@@ -24,31 +24,6 @@ namespace WarAndAiTweaks.AI
                 new StrengthenGoal(kingdom)
             };
 
-            // Consider forming alliances
-            foreach (var otherKingdom in Kingdom.All.Where(k => k != kingdom && !k.IsEliminated))
-            {
-                if (!FactionManager.IsAlliedWithFaction(kingdom, otherKingdom) && !kingdom.IsAtWarWith(otherKingdom))
-                {
-                    potentialGoals.Add(new FormAllianceGoal(kingdom, otherKingdom));
-                }
-            }
-
-            // Consider forming non-aggression pacts
-            foreach (var otherKingdom in Kingdom.All.Where(k => k != kingdom && !k.IsEliminated))
-            {
-                if (!Diplomacy.DiplomaticAction.DiplomaticAgreementManager.HasNonAggressionPact(kingdom, otherKingdom, out _) && !kingdom.IsAtWarWith(otherKingdom))
-                {
-                    potentialGoals.Add(new FormNapGoal(kingdom, otherKingdom));
-                }
-            }
-
-            // Consider breaking existing alliances
-            foreach (var ally in FactionManager.GetEnemyKingdoms(kingdom).Where(k => FactionManager.IsAlliedWithFaction(kingdom, k)))
-            {
-                potentialGoals.Add(new BreakAllianceGoal(kingdom, ally));
-            }
-
-            // Evaluate all potential goals and return the best one
             foreach (var goal in potentialGoals)
             {
                 goal.EvaluatePriority();

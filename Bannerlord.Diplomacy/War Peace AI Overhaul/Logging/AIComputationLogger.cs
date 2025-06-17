@@ -73,10 +73,6 @@ namespace WarAndAiTweaks.AI
         }
 
         // --- War logging ---
-        /// <summary>
-        /// Logs a potential war declaration, including a detailed breakdown of the score.
-        /// </summary>
-        // Add this new method to the class
         public static void LogAIGoal(Kingdom kingdom, WarAndAiTweaks.AI.Goals.AIGoal goal)
         {
             string goalDetails = "";
@@ -92,7 +88,6 @@ namespace WarAndAiTweaks.AI
             WriteLine($"{DateTime.UtcNow:o},AI_GOAL,{kingdom.StringId},{goal.Type},{goal.Priority:F2}{goalDetails}");
         }
 
-        // Replace the old LogWarCandidate method with this new one
         public static void LogWarCandidate(Kingdom owner, Kingdom target, float baseScore, float warDesire, float peaceDesire, float recentPeacePenalty, float totalScore, ExplainedNumber explainedScore)
         {
             var details = FormatExplainedNumber(explainedScore);
@@ -106,13 +101,10 @@ namespace WarAndAiTweaks.AI
         }
 
         // --- Peace logging ---
-        /// <summary>
-        /// Logs a potential peace proposal, including a detailed score breakdown and the ramp-up factor.
-        /// </summary>
-        public static void LogPeaceCandidate(Kingdom owner, Kingdom target, float finalPeaceScore, ExplainedNumber explainedBaseScore, float ramp)
+        public static void LogPeaceCandidate(Kingdom owner, Kingdom target, float finalPeaceScore, ExplainedNumber explainedBaseScore)
         {
             var details = FormatExplainedNumber(explainedBaseScore);
-            WriteLine($"{DateTime.UtcNow:o},PEACE_CANDIDATE,{owner.StringId},{target.StringId},{finalPeaceScore:F2},{ramp:F2},\"{details}\"");
+            WriteLine($"{DateTime.UtcNow:o},PEACE_CANDIDATE,{owner.StringId},{target.StringId},{finalPeaceScore:F2},\"{details}\"");
         }
 
         public static void LogPeaceDecision(Kingdom owner, Kingdom target, float peaceScore)
@@ -129,9 +121,6 @@ namespace WarAndAiTweaks.AI
         }
 
         // --- Alliance logging ---
-        /// <summary>
-        /// Logs a potential alliance, including a detailed breakdown of the score.
-        /// </summary>
         public static void LogAllianceCandidate(Kingdom owner, Kingdom target, ExplainedNumber allianceScore)
         {
             var details = FormatExplainedNumber(allianceScore);
@@ -143,9 +132,6 @@ namespace WarAndAiTweaks.AI
         }
 
         // --- Non-Aggression Pact logging ---
-        /// <summary>
-        /// Logs a potential non-aggression pact, including a detailed breakdown of the score.
-        /// </summary>
         public static void LogPactCandidate(Kingdom owner, Kingdom target, ExplainedNumber pactScore)
         {
             var details = FormatExplainedNumber(pactScore);

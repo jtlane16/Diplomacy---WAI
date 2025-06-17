@@ -33,7 +33,11 @@ namespace WarAndAiTweaks.AI.Goals
             float highestPeaceScore = 0f;
             foreach (var enemy in enemies)
             {
-                var peaceScore = _peaceEvaluator.GetPeaceScore(Kingdom, enemy).ResultNumber;
+                var explainedScore = _peaceEvaluator.GetPeaceScore(Kingdom, enemy);
+                var peaceScore = explainedScore.ResultNumber;
+
+                AIComputationLogger.LogPeaceCandidate(this.Kingdom, enemy, peaceScore, explainedScore);
+
                 if (peaceScore > highestPeaceScore)
                 {
                     highestPeaceScore = peaceScore;

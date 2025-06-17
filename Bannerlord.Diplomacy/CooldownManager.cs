@@ -36,7 +36,6 @@ namespace Diplomacy
             _lastAllianceFormedTime = new Dictionary<string, CampaignTime>();
             Instance = this;
         }
-
         public void UpdateLastPeaceProposalTime(Kingdom kingdom, CampaignTime campaignTime)
         {
             _lastPeaceProposalTime[kingdom] = campaignTime;

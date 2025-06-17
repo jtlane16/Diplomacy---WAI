@@ -58,10 +58,27 @@ namespace WarAndAiTweaks.AI
         /// <summary>
         /// Logs a potential war declaration, including a detailed breakdown of the score.
         /// </summary>
-        public static void LogWarCandidate(Kingdom owner, Kingdom target, float baseScore, float peaceBonus, float totalScore, ExplainedNumber explainedScore)
+        // Add this new method to the class
+        public static void LogAIGoal(Kingdom kingdom, WarAndAiTweaks.AI.Goals.AIGoal goal)
+        {
+            string goalDetails = "";
+            if (goal is WarAndAiTweaks.AI.Goals.ExpandGoal expandGoal && expandGoal.Target != null)
+            {
+                goalDetails = $", Target: {expandGoal.Target.Name}";
+            }
+            else if (goal is WarAndAiTweaks.AI.Goals.SurviveGoal surviveGoal && surviveGoal.PeaceCandidate != null)
+            {
+                goalDetails = $", Peace Candidate: {surviveGoal.PeaceCandidate.Name}";
+            }
+
+            WriteLine($"{DateTime.UtcNow:o},AI_GOAL,{kingdom.StringId},{goal.Type},{goal.Priority:F2}{goalDetails}");
+        }
+
+        // Replace the old LogWarCandidate method with this new one
+        public static void LogWarCandidate(Kingdom owner, Kingdom target, float baseScore, float warDesire, float peaceDesire, float totalScore, ExplainedNumber explainedScore)
         {
             var details = FormatExplainedNumber(explainedScore);
-            WriteLine($"{DateTime.UtcNow:o},WAR_CANDIDATE,{owner.StringId},{target.StringId},{baseScore:F2},{peaceBonus:F2},{totalScore:F2},\"{details}\"");
+            WriteLine($"{DateTime.UtcNow:o},WAR_CANDIDATE,{owner.StringId},{target.StringId},{baseScore:F2},{warDesire:F2},{peaceDesire:F2},{totalScore:F2},\"{details}\"");
         }
 
         public static void LogWarDecision(Kingdom owner, Kingdom target, float chosenScore)
@@ -83,6 +100,14 @@ namespace WarAndAiTweaks.AI
         public static void LogPeaceDecision(Kingdom owner, Kingdom target, float peaceScore)
         {
             WriteLine($"{DateTime.UtcNow:o},PEACE_DECISION,{owner.StringId},{target.StringId},{peaceScore:F2}");
+        }
+
+        /// <summary>
+        /// Logs the result of comparing the war score against the threshold.
+        /// </summary>
+        public static void LogWarThresholdCheck(Kingdom owner, Kingdom target, float score, float threshold, bool declared)
+        {
+            WriteLine($"{DateTime.UtcNow:o},WAR_THRESHOLD_CHECK,{owner.StringId},{target.StringId},{score:F2},{threshold:F2},{(declared ? 1 : 0)}");
         }
 
         // --- Alliance logging ---

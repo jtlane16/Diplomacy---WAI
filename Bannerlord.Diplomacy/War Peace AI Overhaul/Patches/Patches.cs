@@ -1,8 +1,13 @@
 ﻿using Diplomacy.WarExhaustion;
+
 using HarmonyLib;
+
+using Helpers;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
 using TaleWorlds.Library;
 
@@ -11,11 +16,27 @@ namespace Diplomacy.War_Peace_AI_Overhaul
     internal class Patches
     {
         [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomWarDecision")]
-        public static class Patch_DisableRandomWar { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
+        public class Patch_DisableRandomWar { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
 
         [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomPeaceDecision")]
-        public static class Patch_DisableRandomPeace { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
+        public class Patch_DisableRandomPeace { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
 
+        [HarmonyPatch(typeof(Building), "GetBuildingEffectAmount")]
+	public class MilitiaPatch
+	{
+		// Token: 0x06000001 RID: 1 RVA: 0x00002048 File Offset: 0x00000248
+		static void Postfix(Building __instance, BuildingEffectEnum effect, ref float __result)
+		{
+			//If disabled, skip logic
+
+			if (effect == BuildingEffectEnum.Militia && __instance.Name.ToString() == "Militia Grounds")
+			{
+				if (__instance.Town.IsCastle) { __result = __result + 10; }
+				if (__instance.Town.IsTown) { __result = __result + 20; }
+			}
+			return;
+		}
+	}
         [HarmonyPatch(typeof(KingdomDiplomacyVM), "OnDeclarePeace")]
         public class KingdomPlayerPeacePatch
         {

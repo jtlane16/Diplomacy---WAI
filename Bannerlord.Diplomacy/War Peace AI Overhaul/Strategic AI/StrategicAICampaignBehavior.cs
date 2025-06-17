@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
 using TaleWorlds.SaveSystem;
 
 using static WarAndAiTweaks.AI.StrategicAI;
@@ -31,10 +32,16 @@ namespace WarAndAiTweaks.AI.Behaviors
 
         private void OnDailyTick()
         {
-            foreach (var kingdom in Kingdom.All.ToList())
+            var kingdoms = Kingdom.All.ToList();
+            kingdoms.Shuffle();
+            bool warDeclaredThisTick = false;
+
+            foreach (var kingdom in kingdoms)
             {
-                if (kingdom.IsEliminated) continue;
-                if (Clan.PlayerClan.Kingdom == kingdom) continue;
+                if (kingdom.IsEliminated || Clan.PlayerClan.Kingdom == kingdom)
+                {
+                    continue;
+                }
 
                 var id = kingdom.StringId;
                 bool atWar = FactionManager.GetEnemyKingdoms(kingdom).Any();
@@ -55,13 +62,19 @@ namespace WarAndAiTweaks.AI.Behaviors
                     _warDays[id] = 0;
                 }
 
-                var ai = new StrategicAI(kingdom, _warEvaluator, _peaceEvaluator)
+                // 1. EVALUATE GOAL
+                var currentGoal = GoalEvaluator.GetHighestPriorityGoal(kingdom, _peaceDays[id], _warDays[id]);
+                AIComputationLogger.LogAIGoal(kingdom, currentGoal); // Add this line to log the chosen goal
+
+                // 2. CREATE AI INSTANCE WITH THE GOAL
+                var ai = new StrategicAI(kingdom, _warEvaluator, _peaceEvaluator, currentGoal)
                 {
                     DaysSinceLastWar = _peaceDays[id],
-                    DaysAtWar = _warDays[id]    // now valid
+                    DaysAtWar = _warDays[id]
                 };
 
-                ai.TickDaily();
+                // 3. EXECUTE ACTIONS BASED ON GOAL
+                ai.TickDaily(ref warDeclaredThisTick);
 
                 // Persist any changes back
                 _peaceDays[id] = ai.DaysSinceLastWar;

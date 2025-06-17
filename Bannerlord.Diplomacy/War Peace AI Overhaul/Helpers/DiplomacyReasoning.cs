@@ -1,4 +1,6 @@
-﻿using System.Linq;
+﻿using Diplomacy.Extensions;
+
+using System.Linq;
 using System.Text;
 
 using TaleWorlds.CampaignSystem;

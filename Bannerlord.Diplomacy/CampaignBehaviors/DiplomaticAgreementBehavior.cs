@@ -42,11 +42,11 @@ namespace Diplomacy.CampaignBehaviors
             // only apply to kingdom leader clans
             if (clan.MapFaction.IsKingdomFaction && clan.MapFaction.Leader == clan.Leader && !clan.Leader.IsHumanPlayerCharacter)
             {
-                ConsiderNonAggressionPact(clan.Kingdom);
+                //ConsiderNonAggressionPact(clan.Kingdom);
             }
         }
 
-        private void ConsiderNonAggressionPact(Kingdom proposingKingdom)
+        /*private void ConsiderNonAggressionPact(Kingdom proposingKingdom)
         {
             // 1) Re-use a single evaluator instance
             INonAggressionPactEvaluator napEvaluator = new WarAndAiTweaks.AI.NonAggressionPackedScoringModel();
@@ -67,7 +67,7 @@ namespace Diplomacy.CampaignBehaviors
                 // Diplomacy’s built-in action
                 FormNonAggressionPactAction.Apply(proposingKingdom, proposedKingdom);
             }
-        }
+        }*/
 
         private void UpdateDiplomaticAgreements()
         {

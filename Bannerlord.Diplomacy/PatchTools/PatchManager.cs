@@ -66,6 +66,10 @@ namespace Diplomacy.PatchTools
             log.LogDebug($"Applying unannotated Harmony patches (domain: {harmonyId})...");
 
             Harmony = new(harmonyId);
+
+            // ADD THIS LINE
+            Harmony.PatchAll(typeof(PatchManager).Assembly);
+
             var sourcePatches = useMainPatches ? _mainPatchClasses : _campaignPatchClasses;
             _patches = sourcePatches.SelectMany(pc => pc.Patches).ToArray();
 

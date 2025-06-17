@@ -100,19 +100,19 @@ namespace Diplomacy.CampaignBehaviors
         {
             if (!Settings.Instance!.EnableAlliances)
             {
-                BreakAllAlliances(clan);
+                //BreakAllAlliances(clan);
                 return;
             }
 
             if (clan.Leader == clan.Kingdom?.Leader && clan.Leader != Hero.MainHero && clan.MapFaction.IsKingdomFaction)
             {
                 var kingdom = clan.Kingdom;
-                ConsiderBreakingAlliances(kingdom);
-                ConsiderFormingAlliances(kingdom);
+                //ConsiderBreakingAlliances(kingdom);
+                //ConsiderFormingAlliances(kingdom);
             }
         }
 
-        private static void ConsiderFormingAlliances(Kingdom kingdom)
+        /*private static void ConsiderFormingAlliances(Kingdom kingdom)
         {
             var potentialAllies = KingdomExtensions.AllActiveKingdoms
                 .Where(k => k != kingdom && FormAllianceConditions.Instance.CanApply(kingdom, k))
@@ -161,5 +161,6 @@ namespace Diplomacy.CampaignBehaviors
             foreach (var alliedKingdom in alliedKingdoms)
                 BreakAllianceAction.Apply(kingdom, alliedKingdom);
         }
+    }*/
     }
 }

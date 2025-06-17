@@ -240,7 +240,8 @@ namespace WarAndAiTweaks.AI
                 explainedNumber.Add(distPenalty, new TextObject("Distance Penalty"));
 
                 int activeWars = FactionManager.GetEnemyKingdoms(a).Count();
-                float warPenalty = activeWars * 50f;
+                // Increased penalty for active wars
+                float warPenalty = activeWars * 150f; // Increased from 50f
                 explainedNumber.Add(-warPenalty, new TextObject("Active Wars Penalty"));
 
                 float snowball = strengthB > strengthA * SnowballRatioThreshold ? SnowballBonus : 0f;

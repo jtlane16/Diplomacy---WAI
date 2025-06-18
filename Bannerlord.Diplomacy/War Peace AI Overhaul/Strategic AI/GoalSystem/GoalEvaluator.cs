@@ -53,6 +53,7 @@ namespace WarAndAiTweaks.AI
                         break;
                 }
             }
+
             return potentialGoals.OrderByDescending(g => g.Priority).First();
         }
     }

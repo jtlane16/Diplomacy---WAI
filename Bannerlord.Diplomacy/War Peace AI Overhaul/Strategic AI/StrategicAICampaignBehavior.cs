@@ -98,6 +98,34 @@ namespace WarAndAiTweaks.AI.Behaviors
 
                 _peaceDays[kingdomId] = ai.DaysSinceLastWar;
                 _warDays[kingdomId] = ai.DaysAtWar;
+
+                var currentAllies = Kingdom.All.Where(k => k != kingdom && FactionManager.IsAlliedWithFaction(kingdom, k)).ToList();
+                if (currentAllies.Count > 1)
+                {
+                    var breakAllianceScoringModel = new WarAndAiTweaks.AI.BreakAllianceScoringModel();
+                    Kingdom? weakestAlly = null;
+                    float highestBreakScore = float.MinValue;
+
+                    foreach (var ally in currentAllies)
+                    {
+                        // The higher the score from this model, the more the AI wants to break the alliance.
+                        var breakScore = breakAllianceScoringModel.GetBreakAllianceScore(kingdom, ally).ResultNumber;
+                        if (breakScore > highestBreakScore)
+                        {
+                            highestBreakScore = breakScore;
+                            weakestAlly = ally;
+                        }
+                    }
+
+                    // If a weakest ally was found and conditions allow, break the alliance.
+                    if (weakestAlly != null && Diplomacy.DiplomaticAction.Alliance.BreakAllianceConditions.Instance.CanApply(kingdom, weakestAlly))
+                    {
+                        Diplomacy.DiplomaticAction.Alliance.BreakAllianceAction.Apply(kingdom, weakestAlly);
+                        AIComputationLogger.LogBetrayalDecision(kingdom, weakestAlly, highestBreakScore);
+                        // By continuing, we ensure the AI only performs one major diplomatic action per day.
+                        continue;
+                    }
+                }
             }
         }
 

@@ -13,9 +13,9 @@ namespace WarAndAiTweaks.AI.Goals
         private readonly IWarEvaluator _warEvaluator;
         private readonly int _daysSinceLastWar;
         private readonly int _daysAtWar;
-
+        
         // New constants for economic/manpower checks
-        private const int MINIMUM_TREASURY_FOR_WAR = 200000;
+        private const int MINIMUM_TREASURY_FOR_WAR = 200000; 
         private const float MINIMUM_MANPOWER_RATIO = 0.6f; // Kingdom should have at least 60% of its potential strength
 
         public ExpandGoal(Kingdom kingdom, IWarEvaluator warEvaluator, int daysSinceLastWar, int daysAtWar) : base(kingdom, GoalType.Expand)
@@ -27,42 +27,21 @@ namespace WarAndAiTweaks.AI.Goals
 
         public override void EvaluatePriority()
         {
-            // Economic Check
+            // Economic and Manpower checks remain
             if (Kingdom.RulingClan.Gold < MINIMUM_TREASURY_FOR_WAR && Kingdom.RulingClan != Hero.MainHero.Clan)
             {
-                this.Priority = -100; // Heavily penalize expansion if economy is weak
+                this.Priority = -100;
                 return;
             }
-
-            // Manpower Check
             float currentManpowerRatio = GetManpowerRatio(Kingdom);
             if (currentManpowerRatio < MINIMUM_MANPOWER_RATIO)
             {
-                this.Priority = -50; // Penalize expansion if armies are depleted
+                this.Priority = -50;
                 return;
             }
 
-            const float PeaceDesirePenaltyMax = -100f;
-            const float PeaceDesirePenaltyDecayDuration = 30f;
-
             float bestScore = float.MinValue;
             Kingdom? bestTarget = null;
-
-            float warDesire = Math.Min(_daysSinceLastWar * MAX_WAR_DESIRE / WAR_DESIRE_RAMP_DAYS, MAX_WAR_DESIRE);
-            float peaceDesire = Math.Max(_daysAtWar * MAX_WAR_FATIGUE_PENALTY / WAR_FATIGUE_RAMP_DAYS, MAX_WAR_FATIGUE_PENALTY);
-
-            float recentPeacePenalty = 0f;
-            if (!FactionManager.GetEnemyKingdoms(this.Kingdom).Any())
-            {
-                if (CooldownManager.GetDaysSinceLastPeace(this.Kingdom, out var daysSincePeace))
-                {
-                    if (daysSincePeace < PeaceDesirePenaltyDecayDuration)
-                    {
-                        float decayFactor = 1.0f - (daysSincePeace / PeaceDesirePenaltyDecayDuration);
-                        recentPeacePenalty = PeaceDesirePenaltyMax * decayFactor;
-                    }
-                }
-            }
 
             var candidates = Kingdom.All.Where(k =>
                 k != Kingdom &&
@@ -72,14 +51,14 @@ namespace WarAndAiTweaks.AI.Goals
 
             foreach (var k in candidates)
             {
-                var warScore = _warEvaluator.GetWarScore(Kingdom, k);
-                float finalScore = warScore.ResultNumber + warDesire + peaceDesire + recentPeacePenalty;
+                // MODIFIED: We now pass _daysSinceLastWar directly to the evaluator.
+                var warScore = _warEvaluator.GetWarScore(Kingdom, k, _daysSinceLastWar);
+                // The log now shows the final, combined score.
+                AIComputationLogger.LogWarCandidate(this.Kingdom, k, warScore.ResultNumber, 0, 0, 0, warScore.ResultNumber, warScore);
 
-                AIComputationLogger.LogWarCandidate(this.Kingdom, k, warScore.ResultNumber, warDesire, peaceDesire, recentPeacePenalty, finalScore, warScore);
-
-                if (finalScore > bestScore)
+                if (warScore.ResultNumber > bestScore)
                 {
-                    bestScore = finalScore;
+                    bestScore = warScore.ResultNumber;
                     bestTarget = k;
                 }
             }

@@ -41,10 +41,6 @@ namespace WarAndAiTweaks.AI
                         if (goal.Type == GoalType.Survive) goal.Priority += 100;
                         else goal.Priority -= 200;
                         break;
-                    case StrategicState.Rebuilding:
-                        if (goal.Type == GoalType.Strengthen) goal.Priority += 50;
-                        if (goal.Type == GoalType.Expand) goal.Priority -= 100;
-                        break;
                     case StrategicState.Defensive:
                         if (goal.Type == GoalType.Strengthen) goal.Priority += 30;
                         if (goal.Type == GoalType.Expand) goal.Priority -= 50;

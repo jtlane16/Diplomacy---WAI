@@ -42,12 +42,6 @@ namespace WarAndAiTweaks.AI.Goals
                 }
             }
 
-            // Rebuilding State (Now checked after war states)
-            if (kingdom.RulingClan.Gold < CRITICAL_WEALTH_THRESHOLD)
-            {
-                return StrategicState.Rebuilding;
-            }
-
             // Expansionist State (Conditions relaxed)
             var averageKingdomStrength = Kingdom.All.Where(k => !k.IsEliminated).Average(k => k.TotalStrength);
             if (kingdom.TotalStrength > STRONG_STRENGTH_THRESHOLD * averageKingdomStrength

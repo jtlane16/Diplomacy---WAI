@@ -28,21 +28,21 @@ namespace Diplomacy.Extensions
         public static bool IsBorderSettlementWith(this Settlement s, Kingdom other)
         {
             var homeKingdom = s.OwnerClan.Kingdom;
-            if (homeKingdom == other)
+
+            if (homeKingdom == null || homeKingdom == other)
                 return false;
 
-            // CORRECTED: This version uses a valid API call to find nearby settlements.
-            float searchRadius = 30f;
-            var nearbyFortifications = Settlement.All.Where(set => set.IsFortification && set.Position2D.Distance(s.Position2D) < searchRadius);
+            // 1. Get all castles and towns that DO NOT belong to the checking kingdom.
+            var foreignFortifications = Settlement.All
+                .Where(set => (set.IsTown || set.IsCastle) && set.OwnerClan?.Kingdom != homeKingdom);
 
-            foreach (var settlement in nearbyFortifications)
-            {
-                if (settlement.OwnerClan?.Kingdom == other)
-                {
-                    return true;
-                }
-            }
-            return false;
+            // 2. From that pre-filtered list, find the 5 closest to our settlement.
+            var nearestForeignFortifications = foreignFortifications
+                .OrderBy(set => set.Position2D.DistanceSquared(s.Position2D))
+                .Take(5);
+
+            // 3. Check if any of these 5 closest foreign fiefs belong to the target kingdom 'other'.
+            return nearestForeignFortifications.Any(set => set.OwnerClan?.Kingdom == other);
         }
     }
 }

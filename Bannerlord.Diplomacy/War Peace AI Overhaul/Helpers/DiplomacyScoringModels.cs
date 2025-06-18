@@ -29,6 +29,12 @@ namespace WarAndAiTweaks.AI
             var en = new ExplainedNumber(0f, true);
             if (proposer == candidate || FactionManager.IsAlliedWithFaction(proposer, candidate) || proposer.IsAtWarWith(candidate)) return en;
 
+            // NEW LOGIC: Check for and penalize existing alliances
+            if (FactionManager.GetEnemyKingdoms(proposer).Any(k => FactionManager.IsAlliedWithFaction(k, proposer)))
+            {
+                en.Add(-1000f, new TextObject("{=K78W292D}Already in an Alliance"));
+            }
+
             int sharedEnemies = FactionManager.GetEnemyKingdoms(proposer).Intersect(FactionManager.GetEnemyKingdoms(candidate)).Count();
             en.Add(TWMathF.Clamp(sharedEnemies * 25f, 0f, 100f) * SharedEnemyWeight / TotalWeight, new TextObject("shared enemies"));
 

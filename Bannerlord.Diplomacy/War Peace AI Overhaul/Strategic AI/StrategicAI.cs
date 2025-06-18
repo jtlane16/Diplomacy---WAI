@@ -1,5 +1,6 @@
 ﻿using Diplomacy;
 using Diplomacy.DiplomaticAction;
+using Diplomacy.DiplomaticAction.Alliance;
 using Diplomacy.DiplomaticAction.WarPeace;
 using Diplomacy.Extensions;
 using Diplomacy.WarExhaustion;
@@ -68,6 +69,27 @@ namespace WarAndAiTweaks.AI
                 case GoalType.Strengthen:
                     ExecuteStrengthening();
                     break;
+            }
+
+            // NEW: Betrayal Logic Check
+            // If the goal is to expand but there are no valid targets (e.g., landlocked by allies).
+            if (_currentGoal.Type == GoalType.Expand && (_currentGoal as ExpandGoal)?.Target == null && !warDeclaredThisTick)
+            {
+                var betrayalScoringModel = new BreakAllianceScoringModel();
+                var allies = Kingdom.All.Where(k => k != _owner && FactionManager.IsAlliedWithFaction(_owner, k)).ToList();
+
+                if (allies.Any())
+                {
+                    var bestAllyToBetray = allies
+                        .OrderByDescending(ally => betrayalScoringModel.GetBreakAllianceScore(_owner, ally).ResultNumber)
+                        .FirstOrDefault();
+
+                    if (bestAllyToBetray != null && betrayalScoringModel.ShouldBreakAlliance(_owner, bestAllyToBetray))
+                    {
+                        BreakAllianceAction.Apply(_owner, bestAllyToBetray);
+                        AIComputationLogger.LogBetrayalDecision(_owner, bestAllyToBetray, betrayalScoringModel.GetBreakAllianceScore(_owner, bestAllyToBetray).ResultNumber);
+                    }
+                }
             }
         }
 
@@ -138,35 +160,43 @@ namespace WarAndAiTweaks.AI
 
         private void ExecuteSurvival(SurviveGoal? goal)
         {
-            if (goal?.PeaceCandidate == null)
+            if (goal == null || goal.Priority < PEACE_SCORE_THRESHOLD)
             {
                 return;
             }
 
-            var enemy = goal.PeaceCandidate;
-            float peaceScore = goal.Priority; // The goal's priority IS the peace score.
+            var enemies = FactionManager.GetEnemyKingdoms(_owner).ToList();
 
-            if (peaceScore < PEACE_SCORE_THRESHOLD) return;
-
-            bool enemyIsPlayer = enemy.RulingClan == Hero.MainHero.Clan;
-            bool enemyAIAgrees = false;
-
-            if (!enemyIsPlayer)
+            foreach (var enemy in enemies)
             {
-                // Check if the enemy is also receptive to peace.
-                var enemySurviveGoal = new SurviveGoal(enemy, _peaceEvaluator);
-                enemySurviveGoal.EvaluatePriority();
+                float peaceScore = _peaceEvaluator.GetPeaceScore(_owner, enemy).ResultNumber;
 
-                if (enemySurviveGoal.Priority >= PEACE_SCORE_THRESHOLD)
+                // Check if peace score with this specific enemy is high enough
+                if (peaceScore >= PEACE_SCORE_THRESHOLD)
                 {
-                    enemyAIAgrees = true;
-                }
-            }
+                    bool enemyIsPlayer = enemy.RulingClan == Hero.MainHero.Clan;
+                    bool enemyAIAgrees = false;
 
-            if (enemyIsPlayer || enemyAIAgrees)
-            {
-                KingdomPeaceAction.ApplyPeace(_owner, enemy);
-                AIComputationLogger.LogPeaceDecision(_owner, enemy, peaceScore);
+                    if (!enemyIsPlayer)
+                    {
+                        // Check if the enemy AI is also receptive to peace.
+                        var enemySurviveGoal = new SurviveGoal(enemy, _peaceEvaluator);
+                        enemySurviveGoal.EvaluatePriority(); // The priority reflects their desire for peace
+
+                        if (enemySurviveGoal.Priority >= PEACE_SCORE_THRESHOLD)
+                        {
+                            enemyAIAgrees = true;
+                        }
+                    }
+
+                    if (enemyIsPlayer || enemyAIAgrees)
+                    {
+                        KingdomPeaceAction.ApplyPeace(_owner, enemy);
+                        AIComputationLogger.LogPeaceDecision(_owner, enemy, peaceScore);
+                        // IMPORTANT: Break after making one peace deal to avoid ending all wars in a single tick.
+                        break;
+                    }
+                }
             }
         }
 
@@ -207,7 +237,7 @@ namespace WarAndAiTweaks.AI
             private const float EconomyWeight = 20f;
             private const float WarWeaknessWeight = 20f;
             private const float SharedBorderBonus = 30f;
-            private const float NoSharedBorderPenalty = -200;
+            private const float NoSharedBorderPenalty = -100;
 
             public ExplainedNumber GetWarScore(Kingdom a, Kingdom b)
             {

@@ -1,11 +1,8 @@
 ﻿using System;
 using System.Linq;
-
 using TaleWorlds.CampaignSystem;
 using Diplomacy;
-
-using WarAndAiTweaks.AI; // Add this using statement
-
+using WarAndAiTweaks.AI;
 using static WarAndAiTweaks.AI.StrategicAI;
 
 namespace WarAndAiTweaks.AI.Goals
@@ -17,6 +14,10 @@ namespace WarAndAiTweaks.AI.Goals
         private readonly int _daysSinceLastWar;
         private readonly int _daysAtWar;
 
+        // New constants for economic/manpower checks
+        private const int MINIMUM_TREASURY_FOR_WAR = 200000;
+        private const float MINIMUM_MANPOWER_RATIO = 0.6f; // Kingdom should have at least 60% of its potential strength
+
         public ExpandGoal(Kingdom kingdom, IWarEvaluator warEvaluator, int daysSinceLastWar, int daysAtWar) : base(kingdom, GoalType.Expand)
         {
             _warEvaluator = warEvaluator;
@@ -26,8 +27,23 @@ namespace WarAndAiTweaks.AI.Goals
 
         public override void EvaluatePriority()
         {
+            // Economic Check
+            if (Kingdom.RulingClan.Gold < MINIMUM_TREASURY_FOR_WAR && Kingdom.RulingClan != Hero.MainHero.Clan)
+            {
+                this.Priority = -100; // Heavily penalize expansion if economy is weak
+                return;
+            }
+
+            // Manpower Check
+            float currentManpowerRatio = GetManpowerRatio(Kingdom);
+            if (currentManpowerRatio < MINIMUM_MANPOWER_RATIO)
+            {
+                this.Priority = -50; // Penalize expansion if armies are depleted
+                return;
+            }
+
             const float PeaceDesirePenaltyMax = -100f;
-            const float PeaceDesirePenaltyDecayDuration = 30f; // Days
+            const float PeaceDesirePenaltyDecayDuration = 30f;
 
             float bestScore = float.MinValue;
             Kingdom? bestTarget = null;
@@ -35,9 +51,8 @@ namespace WarAndAiTweaks.AI.Goals
             float warDesire = Math.Min(_daysSinceLastWar * MAX_WAR_DESIRE / WAR_DESIRE_RAMP_DAYS, MAX_WAR_DESIRE);
             float peaceDesire = Math.Max(_daysAtWar * MAX_WAR_FATIGUE_PENALTY / WAR_FATIGUE_RAMP_DAYS, MAX_WAR_FATIGUE_PENALTY);
 
-            // Add decaying penalty for being recently at peace.
             float recentPeacePenalty = 0f;
-            if (!FactionManager.GetEnemyKingdoms(this.Kingdom).Any()) // Only apply if currently at peace
+            if (!FactionManager.GetEnemyKingdoms(this.Kingdom).Any())
             {
                 if (CooldownManager.GetDaysSinceLastPeace(this.Kingdom, out var daysSincePeace))
                 {
@@ -69,15 +84,22 @@ namespace WarAndAiTweaks.AI.Goals
                 }
             }
 
-            if (bestTarget != null)
+            this.Priority = bestTarget != null ? bestScore : 0;
+            this.Target = bestTarget;
+        }
+
+        private float GetManpowerRatio(Kingdom kingdom)
+        {
+            float currentStrength = kingdom.TotalStrength;
+            float potentialStrength = 0;
+            foreach (var clan in kingdom.Clans)
             {
-                this.Priority = bestScore;
-                this.Target = bestTarget;
+                if (!clan.IsUnderMercenaryService)
+                {
+                    potentialStrength += clan.Tier * 100;
+                }
             }
-            else
-            {
-                this.Priority = 0;
-            }
+            return potentialStrength > 0 ? currentStrength / potentialStrength : 0;
         }
     }
 }

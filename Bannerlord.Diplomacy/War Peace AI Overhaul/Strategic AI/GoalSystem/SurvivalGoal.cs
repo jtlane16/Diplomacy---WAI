@@ -1,18 +1,16 @@
 ﻿using System;
 using System.Linq;
-
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 using Diplomacy.WarExhaustion;
 using Diplomacy;
-
-using static WarAndAiTweaks.AI.StrategicAI; // Allows access to IPeaceEvaluator
+using static WarAndAiTweaks.AI.StrategicAI;
 
 namespace WarAndAiTweaks.AI.Goals
 {
     public class SurviveGoal : AIGoal
     {
-        public Kingdom? PeaceCandidate { get; private set; }
+        // The PeaceCandidate is removed, as the goal is no longer tied to a single enemy.
         private readonly IPeaceEvaluator _peaceEvaluator;
 
         public SurviveGoal(Kingdom kingdom, IPeaceEvaluator peaceEvaluator) : base(kingdom, GoalType.Survive)
@@ -29,7 +27,8 @@ namespace WarAndAiTweaks.AI.Goals
                 return;
             }
 
-            // Find the best candidate for peace
+            // The goal's priority is now the HIGHEST peace score among all enemies.
+            // This represents the kingdom's most urgent need for peace with at least one party.
             float highestPeaceScore = 0f;
             foreach (var enemy in enemies)
             {
@@ -41,7 +40,6 @@ namespace WarAndAiTweaks.AI.Goals
                 if (peaceScore > highestPeaceScore)
                 {
                     highestPeaceScore = peaceScore;
-                    PeaceCandidate = enemy;
                 }
             }
 

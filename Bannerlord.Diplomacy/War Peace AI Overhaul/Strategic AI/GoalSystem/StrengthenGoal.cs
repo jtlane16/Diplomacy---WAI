@@ -1,6 +1,6 @@
 ﻿using System.Linq;
-
 using TaleWorlds.CampaignSystem;
+using Diplomacy.Extensions;
 
 namespace WarAndAiTweaks.AI.Goals
 {
@@ -17,8 +17,27 @@ namespace WarAndAiTweaks.AI.Goals
                 return;
             }
 
-            var averageStrength = otherKingdoms.Average(k => k.TotalStrength);
+            // --- Threat Assessment ---
+            Kingdom? primaryThreat = otherKingdoms.OrderByDescending(k => k.TotalStrength).FirstOrDefault();
+            float threatBonus = 0;
 
+            if (primaryThreat != null)
+            {
+                bool bordersThreat = this.Kingdom.Settlements.Any(s => s.IsBorderSettlementWith(primaryThreat));
+                if (bordersThreat)
+                {
+                    threatBonus = 25f; // Significant bonus to seek allies against a powerful neighbor.
+                }
+
+                float strengthRatioVsThreat = this.Kingdom.TotalStrength / (primaryThreat.TotalStrength + 1f);
+                if (strengthRatioVsThreat < 0.7f)
+                {
+                    threatBonus += 15f;
+                }
+            }
+
+            // --- Base Priority Calculation ---
+            var averageStrength = otherKingdoms.Average(k => k.TotalStrength);
             if (averageStrength <= 0)
             {
                 this.Priority = 0;
@@ -27,17 +46,17 @@ namespace WarAndAiTweaks.AI.Goals
 
             var strengthRatio = this.Kingdom.TotalStrength / averageStrength;
 
-            // Don't pursue this goal if we are already strong enough.
-            if (strengthRatio > 1.2f)
+            if (strengthRatio < 1.2f)
+            {
+                this.Priority = (1.2f - strengthRatio) * 50f;
+            }
+            else
             {
                 this.Priority = 0;
-                return;
             }
 
-            // Priority is higher the weaker the kingdom is compared to the average.
-            // A ratio of 0.5 gives a priority of (1.2 - 0.5) * 50 = 35.
-            // A ratio of 1.0 gives a priority of (1.2 - 1.0) * 50 = 10.
-            this.Priority = (1.2f - strengthRatio) * 50f;
+            // Add the threat bonus to the final priority.
+            this.Priority += threatBonus;
         }
     }
 }

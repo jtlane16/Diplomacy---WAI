@@ -6,7 +6,7 @@ namespace WarAndAiTweaks.AI.Goals
     {
         public Kingdom Kingdom { get; }
         public GoalType Type { get; }
-        public float Priority { get; protected set; }
+        public float Priority { get; set; } // Changed from protected set; to public set;
 
         protected AIGoal(Kingdom kingdom, GoalType type)
         {

@@ -4,6 +4,7 @@ using System;
 using System.Linq;
 
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
@@ -48,6 +49,8 @@ namespace WarAndAiTweaks.AI
             GetAllianceScore(a, b).ResultNumber >= thr && GetAllianceScore(b, a).ResultNumber >= thr;
     }
 
+
+
     public class NonAggressionPactScoringModel // CORRECTED: Typo "Packed" fixed
     {
         private const float ThreatWeight = 50f;
@@ -84,27 +87,45 @@ namespace WarAndAiTweaks.AI
             var en = new ExplainedNumber(0f, true);
             if (!FactionManager.IsAlliedWithFaction(breaker, ally)) return en;
 
-            en.Add(TWMathF.Clamp(-breaker.GetRelation(ally), 0f, 100f) * 0.25f, new TextObject("poor relations"));
+            en.Add(30f, new TextObject("{=betrayal_base}Desire for new territory"));
+
+            float strengthRatio = breaker.TotalStrength / (ally.TotalStrength + 1f);
+            if (strengthRatio > 1.2f)
+            {
+                en.Add((strengthRatio - 1.2f) * 50f, new TextObject("Military Advantage"));
+            }
+
+            float relations = breaker.GetRelation(ally);
+            if (relations < 0)
+            {
+                en.Add(relations * -1.5f, new TextObject("Poor Relations"));
+            }
 
             int sharedEnemies = FactionManager.GetEnemyKingdoms(breaker).Intersect(FactionManager.GetEnemyKingdoms(ally)).Count();
-            if (sharedEnemies == 0) en.Add(40f, new TextObject("no shared enemies"));
-
-            int borders = breaker.Settlements.Count(s => s.IsBorderSettlementWith(ally));
-            en.Add(borders * 5f, new TextObject("border competition"));
-
-            float ratio = breaker.TotalStrength / (ally.TotalStrength + 1f);
-            if (ratio > 1.2f) en.Add(20f, new TextObject("military advantage"));
-
-            var warEvaluator = new DefaultWarEvaluator();
-            var warScoreVsAlly = warEvaluator.GetWarScore(breaker, ally);
-            if (warScoreVsAlly.ResultNumber > 50f)
+            if (sharedEnemies == 0)
             {
-                en.Add(warScoreVsAlly.ResultNumber * 0.75f, new TextObject("Ally is an opportune target"));
+                en.Add(25f, new TextObject("No Shared Enemies"));
             }
+
+            int honor = breaker.Leader.GetTraitLevel(DefaultTraits.Honor);
+            if (honor > 0)
+            {
+                // MODIFIED: Penalty is now a strong deterrent, not an absolute block.
+                en.Add(honor * -200f, DefaultTraits.Honor.Name);
+            }
+
+            int calculating = breaker.Leader.GetTraitLevel(DefaultTraits.Calculating);
+            if (calculating > 0)
+            {
+                en.Add(calculating * 20f, DefaultTraits.Calculating.Name);
+            }
+
             return en;
         }
 
-        public bool ShouldBreakAlliance(Kingdom breaker, Kingdom ally, float threshold = 60f) =>
-            GetBreakAllianceScore(breaker, ally).ResultNumber >= threshold;
+        public bool ShouldBreakAlliance(Kingdom breaker, Kingdom ally, float threshold = 80f)
+        {
+            return GetBreakAllianceScore(breaker, ally).ResultNumber >= threshold;
+        }
     }
 }

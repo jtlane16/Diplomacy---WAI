@@ -13,6 +13,8 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.SaveSystem;
 
+using WarAndAiTweaks.AI.Goals; // Added this using statement
+
 using static Diplomacy.WarExhaustion.WarExhaustionRecord;
 
 namespace Diplomacy
@@ -38,7 +40,7 @@ namespace Diplomacy
             AddClassDefinition(typeof(RebelFaction), 11);
             AddClassDefinition(typeof(AbdicationFaction), 13);
             AddClassDefinition(typeof(SecessionFaction), 14);
-            AddWarExhaustionEventRecordDefinitions();//19-39 with 8 in reserve
+            AddWarExhaustionEventRecordDefinitions();
         }
 
         private void AddWarExhaustionEventRecordDefinitions()
@@ -56,7 +58,6 @@ namespace Diplomacy
             AddClassDefinition(typeof(OccupiedRecord), 29);
             AddClassDefinition(typeof(DivineInterventionRecord), 30);
             AddClassDefinition(typeof(CaravanRaidRecord), 31);
-            //32-39 reserved
         }
 
         protected override void DefineStructTypes()
@@ -71,6 +72,7 @@ namespace Diplomacy
             AddEnumDefinition(typeof(WarExhaustionType), 15);
             AddEnumDefinition(typeof(VictoriousFactionType), 16);
             AddEnumDefinition(typeof(ActiveQuestState), 17);
+            AddEnumDefinition(typeof(StrategicState), 40); // Added new StrategicState enum
         }
 
         protected override void DefineContainerDefinitions()
@@ -78,17 +80,15 @@ namespace Diplomacy
             ConstructContainerDefinition(typeof(List<Messenger>));
             ConstructContainerDefinition(typeof(Dictionary<IFaction, CampaignTime>));
             ConstructContainerDefinition(typeof(Dictionary<Kingdom, CampaignTime>));
-            //DiplomaticAgreements
             ConstructContainerDefinition(typeof(List<DiplomaticAgreement>));
             ConstructContainerDefinition(typeof(Dictionary<FactionPair, List<DiplomaticAgreement>>));
-            //Factions and civil wars
             ConstructContainerDefinition(typeof(List<RebelFaction>));
             ConstructContainerDefinition(typeof(Dictionary<Kingdom, List<RebelFaction>>));
             ConstructContainerDefinition(typeof(Dictionary<Town, Clan>));
-            //WarExhaustion
             ConstructContainerDefinition(typeof(Dictionary<string, WarExhaustionRecord>));
             ConstructContainerDefinition(typeof(List<WarExhaustionEventRecord>));
             ConstructContainerDefinition(typeof(Dictionary<string, List<WarExhaustionEventRecord>>));
+            ConstructContainerDefinition(typeof(Dictionary<string, StrategicState>)); // Added new Dictionary container
         }
     }
 }

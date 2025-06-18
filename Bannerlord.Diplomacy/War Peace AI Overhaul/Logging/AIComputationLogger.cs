@@ -5,6 +5,8 @@ using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 
+using WarAndAiTweaks.AI.Goals; // Added for StrategicState
+
 namespace WarAndAiTweaks.AI
 {
     /// <summary>
@@ -73,19 +75,21 @@ namespace WarAndAiTweaks.AI
         }
 
         // --- War logging ---
-        public static void LogAIGoal(Kingdom kingdom, WarAndAiTweaks.AI.Goals.AIGoal goal)
+        public static void LogAIGoal(Kingdom kingdom, AIGoal goal, StrategicState state)
         {
             string goalDetails = "";
-            if (goal is WarAndAiTweaks.AI.Goals.ExpandGoal expandGoal && expandGoal.Target != null)
+            if (goal is ExpandGoal expandGoal && expandGoal.Target != null)
             {
                 goalDetails = $", Target: {expandGoal.Target.Name}";
             }
-            else if (goal is WarAndAiTweaks.AI.Goals.SurviveGoal surviveGoal && surviveGoal.PeaceCandidate != null)
-            {
-                goalDetails = $", Peace Candidate: {surviveGoal.PeaceCandidate.Name}";
-            }
+            // The check for SurviveGoal.PeaceCandidate has been removed.
 
-            WriteLine($"{DateTime.UtcNow:o},AI_GOAL,{kingdom.StringId},{goal.Type},{goal.Priority:F2}{goalDetails}");
+            WriteLine($"{DateTime.UtcNow:o},AI_STATE_AND_GOAL,{kingdom.StringId},{state},{goal.Type},{goal.Priority:F2}{goalDetails}");
+        }
+
+        public static void LogBetrayalDecision(Kingdom owner, Kingdom target, float score)
+        {
+            WriteLine($"{DateTime.UtcNow:o},BETRAYAL_DECISION,{owner.StringId},{target.StringId},{score:F2}");
         }
 
         public static void LogWarCandidate(Kingdom owner, Kingdom target, float baseScore, float warDesire, float peaceDesire, float recentPeacePenalty, float totalScore, ExplainedNumber explainedScore)

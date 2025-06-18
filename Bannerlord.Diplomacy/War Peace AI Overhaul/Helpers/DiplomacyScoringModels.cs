@@ -1,17 +1,9 @@
 ﻿using Diplomacy.Extensions;
-
-using System;
 using System.Linq;
-
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
-using TaleWorlds.CampaignSystem.Settlements;
-using TaleWorlds.Core;
-using TaleWorlds.Library;
 using TaleWorlds.Localization;
-
 using static WarAndAiTweaks.AI.StrategicAI;
-
 using TWMathF = TaleWorlds.Library.MathF;
 
 namespace WarAndAiTweaks.AI
@@ -69,13 +61,26 @@ namespace WarAndAiTweaks.AI
             var en = new ExplainedNumber(0f, true);
             if (p == c || p.IsAtWarWith(c) || Diplomacy.DiplomaticAction.DiplomaticAgreementManager.HasNonAggressionPact(p, c, out _)) return en;
 
-            float threatRatio = (c.TotalStrength + 1f) / (p.TotalStrength + 1f);
+            float proposerStrength = p.TotalStrength;
+            float candidateStrength = c.TotalStrength;
+
+            // ADD THIS BLOCK
+            // Prey Penalty: A strong kingdom shouldn't want a pact with a much weaker neighbor.
+            if (proposerStrength > candidateStrength * 1.5f)
+            {
+                float strengthRatio = proposerStrength / (candidateStrength + 1f);
+                float preyPenalty = (strengthRatio - 1.5f) * -20f; // Penalty increases the bigger the strength gap
+                en.Add(preyPenalty, new TextObject("{=qB6b711e}Target is Weak Prey"));
+            }
+            // END OF BLOCK
+
+            float threatRatio = (candidateStrength + 1f) / (proposerStrength + 1f);
             en.Add(TWMathF.Clamp(threatRatio, 0f, 2f) * 50f * ThreatWeight / Total, new TextObject("threat"));
 
             int borders = p.Settlements.Count(s => s.IsBorderSettlementWith(c));
             en.Add(TWMathF.Clamp(borders * 10f, 0f, 100f) * BorderWeight / Total, new TextObject("borders"));
 
-            float recovery = p.GetCasualties() / (p.TotalStrength + 1f);
+            float recovery = p.GetCasualties() / (proposerStrength + 1f);
             en.Add(recovery * 100f * RecoveryWeight / Total, new TextObject("recovery"));
 
             AIComputationLogger.LogPactCandidate(p, c, en);

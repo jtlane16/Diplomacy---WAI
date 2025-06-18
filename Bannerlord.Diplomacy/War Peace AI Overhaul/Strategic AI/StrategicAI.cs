@@ -1,5 +1,4 @@
 ﻿using Diplomacy;
-using Diplomacy.DiplomaticAction;
 using Diplomacy.DiplomaticAction.Alliance;
 using Diplomacy.DiplomaticAction.WarPeace;
 using Diplomacy.Extensions;
@@ -23,12 +22,12 @@ namespace WarAndAiTweaks.AI
 {
     public sealed class StrategicAI
     {
-        // --- AI Behavior Constants (now public) ---
+        // --- AI Behavior Constants ---
         public const float WAR_THRESHOLD = 75f;
-        public const float WAR_DESIRE_RAMP_DAYS = 30f; // From 30
-        public const float MAX_WAR_DESIRE = 35f;       // From 30
-        public const float WAR_FATIGUE_RAMP_DAYS = 90f; // From 120
-        public const float MAX_WAR_FATIGUE_PENALTY = -50f; // From -40
+        public const float WAR_DESIRE_RAMP_DAYS = 30f;
+        public const float MAX_WAR_DESIRE = 35f;       // MODIFIED: From 20 to 35
+        public const float WAR_FATIGUE_RAMP_DAYS = 90f;
+        public const float MAX_WAR_FATIGUE_PENALTY = -50f;
         public const float PEACE_RAMP_DAYS = 30f;
         public const float PEACE_SCORE_THRESHOLD = 30f;
 
@@ -51,7 +50,6 @@ namespace WarAndAiTweaks.AI
             _currentGoal = goal;
         }
 
-        // Inside the TickDaily method of StrategicAI.cs
         public void TickDaily(ref bool warDeclaredThisTick)
         {
             UpdateWarTimer();
@@ -71,8 +69,39 @@ namespace WarAndAiTweaks.AI
                     break;
             }
 
-            // NEW: Betrayal Logic Check
-            // If the goal is to expand but there are no valid targets (e.g., landlocked by allies).
+            // MODIFIED: Logic to break excess alliances
+            var currentAllies = _owner.GetAlliedKingdoms().ToList();
+            if (currentAllies.Count > 1)
+            {
+                var breakAllianceScoringModel = new WarAndAiTweaks.AI.BreakAllianceScoringModel();
+                Kingdom? weakestAlly = null;
+                float highestBreakScore = float.MinValue;
+
+                foreach (var ally in currentAllies)
+                {
+                    // The higher the score, the more the AI wants to break it.
+                    if (BreakAllianceConditions.Instance.CanApply(_owner, ally))
+                    {
+                        var breakScore = breakAllianceScoringModel.GetBreakAllianceScore(_owner, ally).ResultNumber;
+                        if (breakScore > highestBreakScore)
+                        {
+                            highestBreakScore = breakScore;
+                            weakestAlly = ally;
+                        }
+                    }
+                }
+
+                // If a weakest ally was found, break the alliance.
+                if (weakestAlly != null)
+                {
+                    BreakAllianceAction.Apply(_owner, weakestAlly);
+                    AIComputationLogger.LogBetrayalDecision(_owner, weakestAlly, highestBreakScore);
+                    // Return to ensure only one major diplomatic action per day.
+                    return;
+                }
+            }
+
+            // Betrayal Logic Check
             if (_currentGoal.Type == GoalType.Expand && (_currentGoal as ExpandGoal)?.Target == null && !warDeclaredThisTick)
             {
                 var betrayalScoringModel = new BreakAllianceScoringModel();
@@ -138,7 +167,6 @@ namespace WarAndAiTweaks.AI
             AIComputationLogger.LogWarDecision(_owner, bestTarget, score);
 
             bool declared = score >= WAR_THRESHOLD;
-            //AIComputationLogger.LogWarThresholdCheck(_owner, bestTarget, score, WAR_THRESHOLD, declared);
 
             if (declared)
             {
@@ -146,6 +174,7 @@ namespace WarAndAiTweaks.AI
                 warDeclaredThisTick = true;
                 DaysSinceLastWar = 0;
 
+                // This part for player notification remains the same.
                 var defWar = _warEvaluator as DefaultWarEvaluator;
                 string note = defWar != null
                     ? DiplomacyReasoning.WarNotification(_owner, bestTarget, defWar, DaysSinceLastWar)
@@ -171,7 +200,6 @@ namespace WarAndAiTweaks.AI
             {
                 float peaceScore = _peaceEvaluator.GetPeaceScore(_owner, enemy).ResultNumber;
 
-                // Check if peace score with this specific enemy is high enough
                 if (peaceScore >= PEACE_SCORE_THRESHOLD)
                 {
                     bool enemyIsPlayer = enemy.RulingClan == Hero.MainHero.Clan;
@@ -179,9 +207,8 @@ namespace WarAndAiTweaks.AI
 
                     if (!enemyIsPlayer)
                     {
-                        // Check if the enemy AI is also receptive to peace.
                         var enemySurviveGoal = new SurviveGoal(enemy, _peaceEvaluator);
-                        enemySurviveGoal.EvaluatePriority(); // The priority reflects their desire for peace
+                        enemySurviveGoal.EvaluatePriority();
 
                         if (enemySurviveGoal.Priority >= PEACE_SCORE_THRESHOLD)
                         {
@@ -193,7 +220,6 @@ namespace WarAndAiTweaks.AI
                     {
                         KingdomPeaceAction.ApplyPeace(_owner, enemy);
                         AIComputationLogger.LogPeaceDecision(_owner, enemy, peaceScore);
-                        // IMPORTANT: Break after making one peace deal to avoid ending all wars in a single tick.
                         break;
                     }
                 }
@@ -223,7 +249,7 @@ namespace WarAndAiTweaks.AI
 
         // --- Nested Evaluator Classes and Interfaces ---
 
-        public interface IWarEvaluator { ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar); }
+        public interface IWarEvaluator { ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar); } // MODIFIED: Added daysSinceLastWar
         public interface IPeaceEvaluator { ExplainedNumber GetPeaceScore(Kingdom a, Kingdom b); }
 
         public class DefaultWarEvaluator : IWarEvaluator
@@ -237,21 +263,18 @@ namespace WarAndAiTweaks.AI
             private const float EconomyWeight = 20f;
             private const float WarWeaknessWeight = 20f;
             private const float SharedBorderBonus = 30f;
-            private const float NoSharedBorderPenalty = -50f;
+            private const float NoSharedBorderPenalty = -50f; // MODIFIED: From -100f
 
-            // MODIFIED: Method signature now accepts daysSinceLastWar
-            public ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar)
+            public ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar) // MODIFIED: Added daysSinceLastWar
             {
                 ExplainedNumber explainedNumber = new ExplainedNumber(0f, true);
 
-                // NEW: War Desire is now calculated and added directly here.
+                // MODIFIED: War Desire is now calculated and added directly here.
                 float warDesire = Math.Min(daysSinceLastWar * MAX_WAR_DESIRE / WAR_DESIRE_RAMP_DAYS, MAX_WAR_DESIRE);
                 if (warDesire > 0)
                 {
                     explainedNumber.Add(warDesire, new TextObject("War Desire (from peace time)"));
                 }
-
-                // --- The rest of the calculation proceeds as before ---
 
                 float strengthA = a.TotalStrength;
                 float strengthB = b.TotalStrength + Kingdom.All.Where(o => FactionManager.IsAlliedWithFaction(o, b)).Sum(o => o.TotalStrength);
@@ -283,7 +306,7 @@ namespace WarAndAiTweaks.AI
                 float distPenalty = ComputeDistancePenalty(a, b);
                 explainedNumber.Add(distPenalty, new TextObject("Distance Penalty"));
 
-                // UNCHANGED: The penalty for multiple wars remains very high.
+                // UNCHANGED: Kept the high penalty for multiple wars as requested.
                 int activeWars = FactionManager.GetEnemyKingdoms(a).Count();
                 float warPenalty = activeWars * 150f;
                 explainedNumber.Add(-warPenalty, new TextObject("Active Wars Penalty"));
@@ -291,7 +314,27 @@ namespace WarAndAiTweaks.AI
                 float snowball = strengthB > strengthA * SnowballRatioThreshold ? SnowballBonus : 0f;
                 explainedNumber.Add(snowball, new TextObject("Anti-Snowball Bonus"));
 
-                // ... (rest of the original method) ...
+                int totalFiefs = Kingdom.All.Sum(k => k.Settlements.Count);
+                int bFiefs = b.Settlements.Count;
+                float territoryShare = totalFiefs > 0 ? (bFiefs / (float) totalFiefs) * 100f : 0f;
+                float territoryScore = territoryShare * (TerritoryWeight / 100f);
+                explainedNumber.Add(territoryScore, new TextObject("Territory Score"));
+
+                var bAlliance = Kingdom.All.Where(o => o == b || FactionManager.IsAlliedWithFaction(o, b));
+                int allianceFiefs = bAlliance.Sum(o => o.Settlements.Count);
+                float allianceShare = totalFiefs > 0 ? (allianceFiefs / (float) totalFiefs) * 100f : 0f;
+                float allianceTerritoryScore = allianceShare * (AllianceTerritoryWeight / 100f);
+                explainedNumber.Add(allianceTerritoryScore, new TextObject("Alliance Territory Score"));
+
+                float econA = a.Settlements.Where(s => s.IsTown).Sum(s => s.Town.Prosperity);
+                float econB = b.Settlements.Where(s => s.IsTown).Sum(s => s.Town.Prosperity);
+                float econRatio = econA / (econB + 1f);
+                float econScore = TWMathF.Clamp(econRatio, 0f, 2f) * EconomyWeight;
+                explainedNumber.Add(econScore, new TextObject("Economic Strength"));
+
+                float casualtiesRatio = b.GetCasualties() / (b.TotalStrength + 1f);
+                float warWeaknessScore = casualtiesRatio * WarWeaknessWeight;
+                explainedNumber.Add(warWeaknessScore, new TextObject("Target War Weariness"));
 
                 return explainedNumber;
             }

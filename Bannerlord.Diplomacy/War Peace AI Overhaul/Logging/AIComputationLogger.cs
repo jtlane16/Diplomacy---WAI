@@ -1,12 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
+
+using Diplomacy.DiplomaticAction;
+using Diplomacy.Extensions;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 
-using WarAndAiTweaks.AI.Goals; // Added for StrategicState
+using WarAndAiTweaks.AI.Goals;
 
 namespace WarAndAiTweaks.AI
 {
@@ -75,6 +79,35 @@ namespace WarAndAiTweaks.AI
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Logs the diplomatic overview for a kingdom at the start of its turn.
+        /// </summary>
+        public static void LogDiplomaticOverview(Kingdom kingdom, StrategicState state, IEnumerable<Kingdom> wars, IEnumerable<Kingdom> alliances, IEnumerable<DiplomaticAgreement> pacts, IEnumerable<Kingdom> bordering)
+        {
+            var warsStr = string.Join(";", wars.Select(k => k.Name.ToString().Replace(";", "")));
+            var alliancesStr = string.Join(";", alliances.Select(k => k.Name.ToString().Replace(";", "")));
+            var pactsStr = string.Join(";", pacts.Select(p => p.GetOtherKingdom(kingdom).Name.ToString().Replace(";", "")));
+            var borderingStr = string.Join(";", bordering.Select(k => k.Name.ToString().Replace(";", "")));
+
+            WriteLine($"{DateTime.UtcNow:o},DIPLOMATIC_OVERVIEW,{kingdom.StringId},{state},Wars:{warsStr},Alliances:{alliancesStr},NAPs:{pactsStr},Borders:{borderingStr}");
+        }
+
+
+        /// <summary>
+        /// Logs the priority of all potential goals for a kingdom before a decision is made.
+        /// </summary>
+        public static void LogGoalEvaluation(Kingdom kingdom, IEnumerable<AIGoal> goals)
+        {
+            var sb = new StringBuilder();
+            foreach (var goal in goals)
+            {
+                sb.Append($"{goal.Type}:{goal.Priority:F2};");
+            }
+            if (sb.Length > 0) sb.Length--; // Remove trailing semicolon
+
+            WriteLine($"{DateTime.UtcNow:o},GOAL_EVALUATION,{kingdom.StringId},\"{sb.ToString()}\"");
+        }
+
         // --- War logging ---
         public static void LogAIGoal(Kingdom kingdom, AIGoal goal, StrategicState state)
         {
@@ -93,10 +126,13 @@ namespace WarAndAiTweaks.AI
             WriteLine($"{DateTime.UtcNow:o},BETRAYAL_DECISION,{owner.StringId},{target.StringId},{score:F2}");
         }
 
-        public static void LogWarCandidate(Kingdom owner, Kingdom target, float baseScore, float warDesire, float peaceDesire, float recentPeacePenalty, float totalScore, ExplainedNumber explainedScore)
+        /// <summary>
+        /// MODIFIED: Logs the detailed score breakdown for a potential war declaration.
+        /// </summary>
+        public static void LogWarCandidate(Kingdom owner, Kingdom target, ExplainedNumber explainedScore)
         {
             var details = FormatExplainedNumber(explainedScore);
-            WriteLine($"{DateTime.UtcNow:o},WAR_CANDIDATE,{owner.StringId},{target.StringId},{baseScore:F2},{warDesire:F2},{peaceDesire:F2},{recentPeacePenalty:F2},{totalScore:F2},\"{details}\"");
+            WriteLine($"{DateTime.UtcNow:o},WAR_CANDIDATE,{owner.StringId},{target.StringId},{explainedScore.ResultNumber:F2},\"{details}\"");
         }
 
         public static void LogWarDecision(Kingdom owner, Kingdom target, float chosenScore)

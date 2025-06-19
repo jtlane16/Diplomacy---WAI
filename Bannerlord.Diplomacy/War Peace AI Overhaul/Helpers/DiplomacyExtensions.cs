@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -43,6 +44,27 @@ namespace Diplomacy.Extensions
 
             // 3. Check if any of these 5 closest foreign fiefs belong to the target kingdom 'other'.
             return nearestForeignFortifications.Any(set => set.OwnerClan?.Kingdom == other);
+        }
+
+        /// <summary>
+        /// Gets all kingdoms that share a border with the given kingdom.
+        /// </summary>
+        public static IEnumerable<Kingdom> GetBorderingKingdoms(this Kingdom kingdom)
+        {
+            // Get all active kingdoms except for the kingdom itself.
+            // FIXED: Removed redundant 'k.IsKingdomFaction' check, as 'k' is already of type Kingdom.
+            var otherKingdoms = Kingdom.All.Where(k => !k.IsEliminated && k != kingdom).ToList();
+            var borderingKingdoms = new List<Kingdom>();
+
+            foreach (var otherKingdom in otherKingdoms)
+            {
+                // A kingdom borders another if any of its settlements is a border settlement with the other kingdom.
+                if (kingdom.Settlements.Any(s => s.IsBorderSettlementWith(otherKingdom)))
+                {
+                    borderingKingdoms.Add(otherKingdom);
+                }
+            }
+            return borderingKingdoms;
         }
     }
 }

@@ -326,11 +326,13 @@ namespace WarAndAiTweaks.AI
                 float allianceTerritoryScore = allianceShare * (AllianceTerritoryWeight / 100f);
                 explainedNumber.Add(allianceTerritoryScore, new TextObject("Alliance Territory Score"));
 
+                /*
                 float econA = a.Settlements.Where(s => s.IsTown).Sum(s => s.Town.Prosperity);
                 float econB = b.Settlements.Where(s => s.IsTown).Sum(s => s.Town.Prosperity);
                 float econRatio = econA / (econB + 1f);
                 float econScore = TWMathF.Clamp(econRatio, 0f, 2f) * EconomyWeight;
                 explainedNumber.Add(econScore, new TextObject("Economic Strength"));
+                */
 
                 float casualtiesRatio = b.GetCasualties() / (b.TotalStrength + 1f);
                 float warWeaknessScore = casualtiesRatio * WarWeaknessWeight;

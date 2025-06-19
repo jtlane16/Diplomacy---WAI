@@ -2,6 +2,8 @@
 using Bannerlord.UIExtenderEx;
 using Bannerlord.UIExtenderEx.ResourceManager;
 
+using CompanionHighlighter;
+
 using Diplomacy.CampaignBehaviors;
 using Diplomacy.Events;
 using Diplomacy.Models;
@@ -72,6 +74,16 @@ namespace Diplomacy
             PatchManager.ApplyMainPatches(MainHarmonyDomain);
 
             WidgetFactoryManager.Register(typeof(CriticalThresholdTextWidget));
+        }
+
+        public override void OnMissionBehaviorInitialize(Mission mission)
+        {
+            base.OnMissionBehaviorInitialize(mission);
+            if (mission.PlayerTeam != null)
+            {
+                mission.AddMissionBehavior(new CompanionMissionLogic());
+                mission.AddMissionBehavior(new CompanionMissionView());
+            }
         }
 
         protected override void OnSubModuleUnloaded()

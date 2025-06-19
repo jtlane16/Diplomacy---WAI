@@ -3,6 +3,9 @@
 using HarmonyLib;
 
 using Helpers;
+
+using LT_Nemesis;
+
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;

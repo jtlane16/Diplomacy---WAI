@@ -2,6 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 
+using Diplomacy.DiplomaticAction;
+using Diplomacy.Extensions;
+
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.SaveSystem;
@@ -84,6 +87,13 @@ namespace WarAndAiTweaks.AI.Behaviors
 
                 var strategicState = StrategicStateEvaluator.GetStrategicState(kingdom);
                 _kingdomStrategicStates[kingdomId] = strategicState;
+
+                // ADDED: Log diplomatic overview
+                var enemies = FactionManager.GetEnemyKingdoms(kingdom).ToList();
+                var allies = kingdom.GetAlliedKingdoms().ToList();
+                var pacts = DiplomaticAgreementManager.GetPacts(kingdom).ToList();
+                var bordering = kingdom.GetBorderingKingdoms().ToList();
+                AIComputationLogger.LogDiplomaticOverview(kingdom, strategicState, enemies, allies, pacts, bordering);
 
                 var currentGoal = GoalEvaluator.GetHighestPriorityGoal(kingdom, _peaceDays[kingdomId], _warDays[kingdomId], strategicState);
                 AIComputationLogger.LogAIGoal(kingdom, currentGoal, strategicState);

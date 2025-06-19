@@ -44,8 +44,7 @@ namespace WarAndAiTweaks.AI.Goals
 
             // Expansionist State (Conditions relaxed)
             var averageKingdomStrength = Kingdom.All.Where(k => !k.IsEliminated).Average(k => k.TotalStrength);
-            if (kingdom.TotalStrength > STRONG_STRENGTH_THRESHOLD * averageKingdomStrength
-                && kingdom.RulingClan.Gold > RICH_WEALTH_THRESHOLD && !enemies.Any())
+            if (kingdom.TotalStrength > STRONG_STRENGTH_THRESHOLD * averageKingdomStrength && !enemies.Any())
             {
                 return StrategicState.Expansionist;
             }

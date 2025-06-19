@@ -72,6 +72,9 @@
         <PackageReference Include="Bannerlord.ReferenceAssemblies.Sandbox" Version="$(GameVersion).*-*" PrivateAssets="All" />
     </ItemGroup>
     <ItemGroup>
+      <Reference Include="LT_Nemesis">
+        <HintPath>G:\Launchers\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\LT_Nemesis\bin\Win64_Shipping_Client\LT_Nemesis.dll</HintPath>
+      </Reference>
       <Reference Include="PresentationFramework" />
     </ItemGroup>
 

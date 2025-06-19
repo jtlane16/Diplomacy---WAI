@@ -54,6 +54,9 @@ namespace WarAndAiTweaks.AI
                 }
             }
 
+            // ADDED: Log the priorities of all evaluated goals before selecting the best one.
+            AIComputationLogger.LogGoalEvaluation(kingdom, potentialGoals);
+
             return potentialGoals.OrderByDescending(g => g.Priority).First();
         }
     }

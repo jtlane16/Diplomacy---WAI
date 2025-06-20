@@ -6,10 +6,6 @@ using CompanionHighlighter;
 
 using HarmonyLib;
 
-using Microsoft.Extensions.Logging;
-
-using Serilog.Events;
-
 using System;
 using System.Linq;
 using System.Windows;
@@ -21,6 +17,7 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 using TaleWorlds.MountAndBlade;
 
+using WarAndAiTweaks;
 using WarAndAiTweaks.AI;
 using WarAndAiTweaks.AI.Behaviors;
 
@@ -40,8 +37,6 @@ namespace Diplomacy
 
         internal static SubModule Instance { get; set; } = default!;
 
-        private static ILogger Log { get; set; } = default!;
-
         private bool _hasLoaded;
 
         protected override void OnSubModuleLoad()
@@ -53,15 +48,8 @@ namespace Diplomacy
             extender.Register(typeof(SubModule).Assembly);
             extender.Enable();
 
-            // Configure the main mod log
-            this.AddSerilogLoggerProvider($"{Name}.log", new[] { $"{Name}.*" }, config => config.MinimumLevel.Is(LogEventLevel.Information));
-
-            // Configure the separate AI log
-            this.AddSerilogLoggerProvider("Diplomacy_AI.log", new[] { "WarAndAiTweaks.*" }, config => config.MinimumLevel.Is(LogEventLevel.Information));
-
             // Clear the AI log on every game load
             AIComputationLogger.ClearLog();
-
         }
 
         public override void OnMissionBehaviorInitialize(Mission mission)
@@ -77,7 +65,6 @@ namespace Diplomacy
         protected override void OnSubModuleUnloaded()
         {
             base.OnSubModuleUnloaded();
-            Log.LogInformation($"Unloaded {Name} {Version}!");
         }
 
         protected override void OnBeforeInitialModuleScreenSetAsRoot()
@@ -87,8 +74,6 @@ namespace Diplomacy
             if (!_hasLoaded)
             {
                 _hasLoaded = true;
-                Log.LogInformation($"Loaded {Name} {Version}!");
-
                 InformationManager.DisplayMessage(new InformationMessage(new TextObject($"{{=hPERH3u4}}Loaded {{NAME}}").SetTextVariable("NAME", DisplayName).ToString(), StdTextColor));
             }
         }
@@ -99,11 +84,11 @@ namespace Diplomacy
 
             if (game.GameType is Campaign)
             {
-                var currentKingdomDecisionPermissionModel = GetGameModel<KingdomDecisionPermissionModel>(gameStarterObject);
-                if (currentKingdomDecisionPermissionModel is null)
-                    Log.LogWarning("No default KingdomDecisionPermissionModel found!");
-
-                Log.LogDebug("Campaign session started.");
+                if (gameStarterObject is CampaignGameStarter campaignGameStarter)
+                {
+                    campaignGameStarter.AddBehavior(new StrategicAICampaignBehavior());
+                    campaignGameStarter.AddBehavior(new DiplomaticAgreementManager());
+                }
             }
         }
 
@@ -122,12 +107,6 @@ namespace Diplomacy
         public override void OnGameEnd(Game game)
         {
             base.OnGameEnd(game);
-
-            if (game.GameType is Campaign)
-            {
-                //PatchManager.RemoveCampaignPatches();// Not sure we should do this...
-                Log.LogDebug("Campaign session ended.");
-            }
         }
     }
 }

@@ -136,7 +136,7 @@ namespace WarAndAiTweaks.AI.Behaviors
                         }
                     }
 
-                    if (weakestAlly != null && DiplomaticAction.BreakAllianceConditions.Instance.CanApply(kingdom, weakestAlly))
+                    if (weakestAlly != null)
                     {
                         DiplomaticAction.BreakAllianceAction.Apply(kingdom, weakestAlly);
                         AIComputationLogger.LogBetrayalDecision(kingdom, weakestAlly, highestBreakScore);

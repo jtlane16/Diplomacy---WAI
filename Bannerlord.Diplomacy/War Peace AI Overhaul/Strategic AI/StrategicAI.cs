@@ -75,14 +75,11 @@ namespace WarAndAiTweaks.AI
 
                 foreach (var ally in currentAllies)
                 {
-                    if (BreakAllianceConditions.Instance.CanApply(_owner, ally))
+                    var breakScore = breakAllianceScoringModel.GetBreakAllianceScore(_owner, ally).ResultNumber;
+                    if (breakScore > highestBreakScore)
                     {
-                        var breakScore = breakAllianceScoringModel.GetBreakAllianceScore(_owner, ally).ResultNumber;
-                        if (breakScore > highestBreakScore)
-                        {
-                            highestBreakScore = breakScore;
-                            weakestAlly = ally;
-                        }
+                        highestBreakScore = breakScore;
+                        weakestAlly = ally;
                     }
                 }
 

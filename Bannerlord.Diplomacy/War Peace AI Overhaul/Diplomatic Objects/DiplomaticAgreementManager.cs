@@ -16,7 +16,6 @@ namespace WarAndAiTweaks
 
         public static DiplomaticAgreementManager Instance { get; private set; }
 
-        // This property makes the alliance list accessible to other files.
         public static IEnumerable<Alliance> Alliances
         {
             get
@@ -26,6 +25,18 @@ namespace WarAndAiTweaks
                     return Enumerable.Empty<Alliance>();
                 }
                 return Instance._alliances;
+            }
+        }
+
+        public static IEnumerable<NonAggressionPact> NonAggressionPacts
+        {
+            get
+            {
+                if (Instance == null)
+                {
+                    return Enumerable.Empty<NonAggressionPact>();
+                }
+                return Instance._nonAggressionPacts;
             }
         }
 
@@ -70,6 +81,11 @@ namespace WarAndAiTweaks
             {
                 Instance._nonAggressionPacts.Add(new NonAggressionPact(kingdom1, kingdom2));
             }
+        }
+
+        public static void BreakNonAggressionPact(Kingdom kingdom1, Kingdom kingdom2)
+        {
+            Instance._nonAggressionPacts.RemoveAll(p => (p.Faction1 == kingdom1 && p.Faction2 == kingdom2) || (p.Faction1 == kingdom2 && p.Faction2 == kingdom1));
         }
 
         public static void DeclareAlliance(Kingdom kingdom1, Kingdom kingdom2)

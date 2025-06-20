@@ -123,8 +123,27 @@ namespace WarAndAiTweaks.AI
 
             if (bestAllianceCandidate != null && allianceScoringModel.ShouldTakeActionBidirectional(_owner, bestAllianceCandidate, 60f))
             {
-                DiplomaticAction.BreakAllianceAction.Apply(_owner, bestAllianceCandidate);
-                AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
+                if (bestAllianceCandidate.Leader == Hero.MainHero)
+                {
+                    var inquiryTitle = new TextObject("{=3pbwc8sh}Alliance Proposal");
+                    var inquiryText = new TextObject("{=QbOqatd7}{KINGDOM} is proposing an alliance with {PLAYER_KINGDOM}.")
+                        .SetTextVariable("KINGDOM", _owner.Name)
+                        .SetTextVariable("PLAYER_KINGDOM", bestAllianceCandidate.Name);
+
+                    InformationManager.ShowInquiry(new InquiryData(inquiryTitle.ToString(), inquiryText.ToString(), true, true, new TextObject("{=3fTqLwkC}Accept").ToString(), new TextObject("{=dRoMejb0}Decline").ToString(),
+                        () => {
+                            DiplomaticAction.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
+                            AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
+                        },
+                        () => {
+                            AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, false, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
+                        }));
+                }
+                else
+                {
+                    DiplomaticAction.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
+                    AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
+                }
                 return;
             }
 
@@ -135,8 +154,27 @@ namespace WarAndAiTweaks.AI
 
             if (bestNapCandidate != null && napScoringModel.ShouldTakeActionBidirectional(_owner, bestNapCandidate, 50f))
             {
-                DiplomaticAction.FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
-                AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
+                if (bestNapCandidate.Leader == Hero.MainHero)
+                {
+                    var inquiryTitle = new TextObject("{=yj4XFa5T}Non-Aggression Pact Proposal");
+                    var inquiryText = new TextObject("{=gyLjlpJB}{KINGDOM} is proposing a non-aggression pact with {PLAYER_KINGDOM}.")
+                        .SetTextVariable("KINGDOM", _owner.Name)
+                        .SetTextVariable("PLAYER_KINGDOM", bestNapCandidate.Name);
+
+                    InformationManager.ShowInquiry(new InquiryData(inquiryTitle.ToString(), inquiryText.ToString(), true, true, new TextObject("{=3fTqLwkC}Accept").ToString(), new TextObject("{=dRoMejb0}Decline").ToString(),
+                        () => {
+                            DiplomaticAction.FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
+                            AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
+                        },
+                        () => {
+                            AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, false, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
+                        }));
+                }
+                else
+                {
+                    DiplomaticAction.FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
+                    AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
+                }
                 return;
             }
         }

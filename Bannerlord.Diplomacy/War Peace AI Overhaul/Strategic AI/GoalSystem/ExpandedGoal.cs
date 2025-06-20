@@ -1,4 +1,7 @@
-﻿using System;
+﻿// In: Bannerlord.Diplomacy/War Peace AI Overhaul/Strategic AI/GoalSystem/ExpandedGoal.cs
+
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using TaleWorlds.CampaignSystem;
 using Diplomacy;
@@ -13,28 +16,21 @@ namespace WarAndAiTweaks.AI.Goals
         private readonly IWarEvaluator _warEvaluator;
         private readonly int _daysSinceLastWar;
         private readonly int _daysAtWar;
+        private readonly Dictionary<string, CampaignTime> _lastPeaceTimes;
 
-        // New constants for economic/manpower checks
         private const int MINIMUM_TREASURY_FOR_WAR = 200000;
-        private const float MINIMUM_MANPOWER_RATIO = 0.6f; // Kingdom should have at least 60% of its potential strength
+        private const float MINIMUM_MANPOWER_RATIO = 0.6f;
 
-        public ExpandGoal(Kingdom kingdom, IWarEvaluator warEvaluator, int daysSinceLastWar, int daysAtWar) : base(kingdom, GoalType.Expand)
+        public ExpandGoal(Kingdom kingdom, IWarEvaluator warEvaluator, int daysSinceLastWar, int daysAtWar, Dictionary<string, CampaignTime> lastPeaceTimes) : base(kingdom, GoalType.Expand)
         {
             _warEvaluator = warEvaluator;
             _daysSinceLastWar = daysSinceLastWar;
             _daysAtWar = daysAtWar;
+            _lastPeaceTimes = lastPeaceTimes;
         }
 
         public override void EvaluatePriority()
         {
-            /*
-            // Economic and Manpower checks remain
-            if (Kingdom.RulingClan.Gold < MINIMUM_TREASURY_FOR_WAR && Kingdom.RulingClan != Hero.MainHero.Clan)
-            {
-                this.Priority = -100;
-                return;
-            }
-            */
             float currentManpowerRatio = GetManpowerRatio(Kingdom);
             if (currentManpowerRatio < MINIMUM_MANPOWER_RATIO)
             {
@@ -49,13 +45,11 @@ namespace WarAndAiTweaks.AI.Goals
                 k != Kingdom &&
                 !Kingdom.IsAtWarWith(k) &&
                 !FactionManager.IsAlliedWithFaction(Kingdom, k) &&
-                !Diplomacy.DiplomaticAction.DiplomaticAgreementManager.HasNonAggressionPact(Kingdom, k, out _));
+                !DiplomaticAgreementManager.HasNonAggressionPact(Kingdom, k, out _));
 
             foreach (var k in candidates)
             {
-                // MODIFIED: We now pass _daysSinceLastWar directly to the evaluator.
-                var warScore = _warEvaluator.GetWarScore(Kingdom, k, _daysSinceLastWar);
-                // The log now shows the final, combined score.
+                var warScore = _warEvaluator.GetWarScore(Kingdom, k, _daysSinceLastWar, _lastPeaceTimes);
                 AIComputationLogger.LogWarCandidate(this.Kingdom, k, warScore);
 
                 if (warScore.ResultNumber > bestScore)

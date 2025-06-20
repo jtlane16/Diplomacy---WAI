@@ -59,7 +59,7 @@ namespace WarAndAiTweaks.AI
         public ExplainedNumber GetPactScore(Kingdom p, Kingdom c)
         {
             var en = new ExplainedNumber(0f, true);
-            if (p == c || p.IsAtWarWith(c) || Diplomacy.DiplomaticAction.DiplomaticAgreementManager.HasNonAggressionPact(p, c, out _)) return en;
+            if (p == c || p.IsAtWarWith(c) ||DiplomaticAgreementManager.HasNonAggressionPact(p, c, out _)) return en;
 
             float proposerStrength = p.TotalStrength;
             float candidateStrength = c.TotalStrength;

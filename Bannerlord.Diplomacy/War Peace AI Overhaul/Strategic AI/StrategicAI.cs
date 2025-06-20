@@ -1,9 +1,5 @@
-﻿using Diplomacy;
-using Diplomacy.DiplomaticAction.Alliance;
-using Diplomacy.DiplomaticAction.WarPeace;
-using Diplomacy.Extensions;
-using Diplomacy.WarExhaustion;
-
+﻿using Diplomacy.Extensions;
+using WarAndAiTweaks.DiplomaticAction;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,7 +21,7 @@ namespace WarAndAiTweaks.AI
         // --- AI Behavior Constants ---
         public const float WAR_THRESHOLD = 75f;
         public const float WAR_DESIRE_RAMP_DAYS = 30f;
-        public const float MAX_WAR_DESIRE = 35f;       // MODIFIED: From 20 to 35
+        public const float MAX_WAR_DESIRE = 35f;
         public const float WAR_FATIGUE_RAMP_DAYS = 90f;
         public const float MAX_WAR_FATIGUE_PENALTY = -50f;
         public const float PEACE_RAMP_DAYS = 30f;
@@ -36,18 +32,20 @@ namespace WarAndAiTweaks.AI
         private readonly IWarEvaluator _warEvaluator;
         private readonly IPeaceEvaluator _peaceEvaluator;
         private readonly AIGoal _currentGoal;
+        private readonly Dictionary<string, CampaignTime> _lastPeaceTimes;
 
         private readonly Dictionary<Kingdom, int> _daysAtWar = new Dictionary<Kingdom, int>();
 
         public int DaysSinceLastWar { get; set; } = 0;
         public int DaysAtWar { get; set; }
 
-        public StrategicAI(Kingdom owner, IWarEvaluator warEval, IPeaceEvaluator peaceEval, AIGoal goal)
+        public StrategicAI(Kingdom owner, IWarEvaluator warEval, IPeaceEvaluator peaceEval, AIGoal goal, Dictionary<string, CampaignTime> lastPeaceTimes)
         {
             _owner = owner;
             _warEvaluator = warEval;
             _peaceEvaluator = peaceEval;
             _currentGoal = goal;
+            _lastPeaceTimes = lastPeaceTimes;
         }
 
         public void TickDaily(ref bool warDeclaredThisTick)
@@ -55,7 +53,6 @@ namespace WarAndAiTweaks.AI
             UpdateWarTimer();
             UpdatePeaceTimer();
 
-            // Execute logic based on the current goal
             switch (_currentGoal.Type)
             {
                 case GoalType.Expand:
@@ -69,7 +66,6 @@ namespace WarAndAiTweaks.AI
                     break;
             }
 
-            // MODIFIED: Logic to break excess alliances
             var currentAllies = _owner.GetAlliedKingdoms().ToList();
             if (currentAllies.Count > 1)
             {
@@ -79,7 +75,6 @@ namespace WarAndAiTweaks.AI
 
                 foreach (var ally in currentAllies)
                 {
-                    // The higher the score, the more the AI wants to break it.
                     if (BreakAllianceConditions.Instance.CanApply(_owner, ally))
                     {
                         var breakScore = breakAllianceScoringModel.GetBreakAllianceScore(_owner, ally).ResultNumber;
@@ -91,17 +86,14 @@ namespace WarAndAiTweaks.AI
                     }
                 }
 
-                // If a weakest ally was found, break the alliance.
                 if (weakestAlly != null)
                 {
                     BreakAllianceAction.Apply(_owner, weakestAlly);
                     AIComputationLogger.LogBetrayalDecision(_owner, weakestAlly, highestBreakScore);
-                    // Return to ensure only one major diplomatic action per day.
                     return;
                 }
             }
 
-            // Betrayal Logic Check
             if (_currentGoal.Type == GoalType.Expand && (_currentGoal as ExpandGoal)?.Target == null && !warDeclaredThisTick)
             {
                 var betrayalScoringModel = new BreakAllianceScoringModel();
@@ -127,7 +119,6 @@ namespace WarAndAiTweaks.AI
             var allianceScoringModel = new WarAndAiTweaks.AI.AllianceScoringModel();
             var napScoringModel = new WarAndAiTweaks.AI.NonAggressionPactScoringModel();
 
-            // Prioritize alliances first as they are a bigger commitment.
             var bestAllianceCandidate = Kingdom.All
                 .Where(k => k != _owner && !_owner.IsAtWarWith(k) && !FactionManager.IsAlliedWithFaction(_owner, k))
                 .OrderByDescending(k => allianceScoringModel.GetAllianceScore(_owner, k).ResultNumber)
@@ -135,20 +126,19 @@ namespace WarAndAiTweaks.AI
 
             if (bestAllianceCandidate != null && allianceScoringModel.ShouldTakeActionBidirectional(_owner, bestAllianceCandidate, 60f))
             {
-                Diplomacy.DiplomaticAction.Alliance.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
+                DiplomaticAction.BreakAllianceAction.Apply(_owner, bestAllianceCandidate);
                 AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
-                return; // Only do one diplomatic action per day.
+                return;
             }
 
-            // If no alliance was formed, consider a non-aggression pact.
             var bestNapCandidate = Kingdom.All
-                .Where(k => k != _owner && !_owner.IsAtWarWith(k) && !FactionManager.IsAlliedWithFaction(_owner, k) && !Diplomacy.DiplomaticAction.DiplomaticAgreementManager.HasNonAggressionPact(_owner, k, out _))
+                .Where(k => k != _owner && !_owner.IsAtWarWith(k) && !FactionManager.IsAlliedWithFaction(_owner, k) && !DiplomaticAgreementManager.HasNonAggressionPact(_owner, k, out _))
                 .OrderByDescending(k => napScoringModel.GetPactScore(_owner, k).ResultNumber)
                 .FirstOrDefault();
 
             if (bestNapCandidate != null && napScoringModel.ShouldTakeActionBidirectional(_owner, bestNapCandidate, 50f))
             {
-                Diplomacy.DiplomaticAction.NonAggressionPact.FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
+                DiplomaticAction.FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
                 AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
                 return;
             }
@@ -174,7 +164,6 @@ namespace WarAndAiTweaks.AI
                 warDeclaredThisTick = true;
                 DaysSinceLastWar = 0;
 
-                // This part for player notification remains the same.
                 var defWar = _warEvaluator as DefaultWarEvaluator;
                 string note = defWar != null
                     ? DiplomacyReasoning.WarNotification(_owner, bestTarget, defWar, DaysSinceLastWar)
@@ -218,7 +207,7 @@ namespace WarAndAiTweaks.AI
 
                     if (enemyIsPlayer || enemyAIAgrees)
                     {
-                        KingdomPeaceAction.ApplyPeace(_owner, enemy);
+                        MakePeaceAction.Apply(_owner, enemy);
                         AIComputationLogger.LogPeaceDecision(_owner, enemy, peaceScore);
                         break;
                     }
@@ -249,13 +238,13 @@ namespace WarAndAiTweaks.AI
 
         // --- Nested Evaluator Classes and Interfaces ---
 
-        public interface IWarEvaluator { ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar); } // MODIFIED: Added daysSinceLastWar
+        public interface IWarEvaluator { ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar, Dictionary<string, CampaignTime> lastPeaceTimes); }
         public interface IPeaceEvaluator { ExplainedNumber GetPeaceScore(Kingdom a, Kingdom b); }
 
         public class DefaultWarEvaluator : IWarEvaluator
         {
             private const float DistanceWeight = 30f;
-            private const float MaxDistance = 800000f;
+            private const float MaxDistance = 1500f;
             private const float SnowballRatioThreshold = 1.5f;
             private const float SnowballBonus = 30f;
             private const float TerritoryWeight = 25f;
@@ -263,13 +252,27 @@ namespace WarAndAiTweaks.AI
             private const float EconomyWeight = 20f;
             private const float WarWeaknessWeight = 20f;
             private const float SharedBorderBonus = 30f;
-            private const float NoSharedBorderPenalty = -50f; // MODIFIED: From -100f
+            private const float NoSharedBorderPenalty = -50f;
+            private const float RECENT_PEACE_PENALTY_MAX = -200f;
 
-            public ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar) // MODIFIED: Added daysSinceLastWar
+            public ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar, Dictionary<string, CampaignTime> lastPeaceTimes)
             {
                 ExplainedNumber explainedNumber = new ExplainedNumber(0f, true);
 
-                // MODIFIED: War Desire is now calculated and added directly here.
+                var key = (string.Compare(a.StringId, b.StringId) < 0) ? $"{a.StringId}_{b.StringId}" : $"{b.StringId}_{a.StringId}";
+                if (lastPeaceTimes.TryGetValue(key, out var peaceTime))
+                {
+                    float elapsedDaysSincePeace = peaceTime.ElapsedDaysUntilNow;
+                    float cooldownDays = 20f;
+
+                    if (elapsedDaysSincePeace < cooldownDays)
+                    {
+                        float penaltyRatio = (cooldownDays - elapsedDaysSincePeace) / cooldownDays;
+                        float penalty = RECENT_PEACE_PENALTY_MAX * penaltyRatio;
+                        explainedNumber.Add(penalty, new TextObject("Recent Peace Treaty"));
+                    }
+                }
+
                 float warDesire = Math.Min(daysSinceLastWar * MAX_WAR_DESIRE / WAR_DESIRE_RAMP_DAYS, MAX_WAR_DESIRE);
                 if (warDesire > 0)
                 {
@@ -306,7 +309,6 @@ namespace WarAndAiTweaks.AI
                 float distPenalty = ComputeDistancePenalty(a, b);
                 explainedNumber.Add(distPenalty, new TextObject("Distance Penalty"));
 
-                // UNCHANGED: Kept the high penalty for multiple wars as requested.
                 int activeWars = FactionManager.GetEnemyKingdoms(a).Count();
                 float warPenalty = activeWars * 150f;
                 explainedNumber.Add(-warPenalty, new TextObject("Active Wars Penalty"));
@@ -325,14 +327,6 @@ namespace WarAndAiTweaks.AI
                 float allianceShare = totalFiefs > 0 ? (allianceFiefs / (float) totalFiefs) * 100f : 0f;
                 float allianceTerritoryScore = allianceShare * (AllianceTerritoryWeight / 100f);
                 explainedNumber.Add(allianceTerritoryScore, new TextObject("Alliance Territory Score"));
-
-                /*
-                float econA = a.Settlements.Where(s => s.IsTown).Sum(s => s.Town.Prosperity);
-                float econB = b.Settlements.Where(s => s.IsTown).Sum(s => s.Town.Prosperity);
-                float econRatio = econA / (econB + 1f);
-                float econScore = TWMathF.Clamp(econRatio, 0f, 2f) * EconomyWeight;
-                explainedNumber.Add(econScore, new TextObject("Economic Strength"));
-                */
 
                 float casualtiesRatio = b.GetCasualties() / (b.TotalStrength + 1f);
                 float warWeaknessScore = casualtiesRatio * WarWeaknessWeight;
@@ -368,25 +362,13 @@ namespace WarAndAiTweaks.AI
                 var stance = k.GetStanceWith(enemy);
                 if (stance == null || !stance.IsAtWar) return explainedNumber;
 
-                // War Duration
                 var daysAtWar = stance.WarStartDate.ElapsedDaysUntilNow;
-                float warDurationFactor = Math.Min(daysAtWar / 180f, 1.0f); // scales up to ~6 months
+                float warDurationFactor = Math.Min(daysAtWar / 180f, 1.0f);
                 explainedNumber.Add(warDurationFactor * 100f * (WarDurationWeight / 100f), new TextObject("{=XIPMI3gR}War Duration"));
+                float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
+                explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("Casualties"));
 
-                // War Exhaustion (if enabled)
-                if (Settings.Instance!.EnableWarExhaustion && WarExhaustionManager.Instance is { } wem)
-                {
-                    float exhaustion = wem.GetWarExhaustion(k, enemy);
-                    explainedNumber.Add(exhaustion * (WarExhaustionWeight / 100f), new TextObject("{=V542tneW}War Exhaustion"));
-                }
-                else // Fallback to casualties if exhaustion is disabled
-                {
-                    float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
-                    explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("Casualties"));
-                }
-
-                // Fiefs Lost
-                int fiefsLost = stance.GetSuccessfulSieges(enemy); // Fiefs `k` lost to `enemy`
+                int fiefsLost = stance.GetSuccessfulSieges(enemy);
                 explainedNumber.Add(fiefsLost * 5f * (FiefLossWeight / 100f), new TextObject("{=DrNBDhx3}Fiefs Lost"));
 
                 return explainedNumber;

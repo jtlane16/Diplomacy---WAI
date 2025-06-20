@@ -2,7 +2,6 @@
 using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
-using Diplomacy.WarExhaustion;
 using Diplomacy;
 using static WarAndAiTweaks.AI.StrategicAI;
 
@@ -64,16 +63,6 @@ namespace WarAndAiTweaks.AI.Goals
             if (this.Kingdom.Fiefs.Count == 0)
             {
                 this.Priority += 30;
-            }
-
-            // Drastically increase priority if war exhaustion is critical
-            if (Settings.Instance!.EnableWarExhaustion && WarExhaustionManager.Instance is { } wem)
-            {
-                float maxExhaustion = enemies.Max(enemy => wem.GetWarExhaustion(this.Kingdom, enemy));
-                if (maxExhaustion > 75)
-                {
-                    this.Priority += (maxExhaustion - 75) * 2; // Add up to 50 extra points for exhaustion
-                }
             }
         }
     }

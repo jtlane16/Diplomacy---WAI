@@ -4,12 +4,6 @@ using Bannerlord.UIExtenderEx.ResourceManager;
 
 using CompanionHighlighter;
 
-using Diplomacy.CampaignBehaviors;
-using Diplomacy.Events;
-using Diplomacy.Models;
-using Diplomacy.PatchTools;
-using Diplomacy.Widgets;
-
 using HarmonyLib;
 
 using Microsoft.Extensions.Logging;
@@ -68,12 +62,6 @@ namespace Diplomacy
             // Clear the AI log on every game load
             AIComputationLogger.ClearLog();
 
-            Log = LogFactory.Get<SubModule>();
-            Log.LogInformation($"Loading {Name} {Version}...");
-
-            PatchManager.ApplyMainPatches(MainHarmonyDomain);
-
-            WidgetFactoryManager.Register(typeof(CriticalThresholdTextWidget));
         }
 
         public override void OnMissionBehaviorInitialize(Mission mission)
@@ -111,33 +99,9 @@ namespace Diplomacy
 
             if (game.GameType is Campaign)
             {
-                PatchManager.ApplyCampaignPatches(CampaignHarmonyDomain);
-
-                DiplomacyEvents.Instance = new DiplomacyEvents();
-                var gameStarter = (CampaignGameStarter) gameStarterObject;
-
-                gameStarter.AddBehavior(new DiplomaticAgreementBehavior());
-                gameStarter.AddBehavior(new CooldownBehavior());
-                gameStarter.AddBehavior(new MessengerBehavior());
-
-                if (Settings.Instance!.EnableWarExhaustion)
-                    gameStarter.AddBehavior(new WarExhaustionBehavior());
-
-                if (Settings.Instance!.EnableFiefFirstRight)
-                    gameStarter.AddBehavior(new KeepFiefAfterSiegeBehavior());
-
-                gameStarter.AddBehavior(new AllianceBehavior());
-                gameStarter.AddBehavior(new MaintainInfluenceBehavior());
-                gameStarter.AddBehavior(new ExpansionismBehavior());
-                gameStarter.AddBehavior(new CivilWarBehavior());
-                gameStarter.AddBehavior(new UIBehavior());
-                gameStarter.AddBehavior(new StrategicAICampaignBehavior());
-
                 var currentKingdomDecisionPermissionModel = GetGameModel<KingdomDecisionPermissionModel>(gameStarterObject);
                 if (currentKingdomDecisionPermissionModel is null)
                     Log.LogWarning("No default KingdomDecisionPermissionModel found!");
-
-                gameStarter.AddModel(new DiplomacyKingdomDecisionPermissionModel(currentKingdomDecisionPermissionModel));
 
                 Log.LogDebug("Campaign session started.");
             }

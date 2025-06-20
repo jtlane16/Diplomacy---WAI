@@ -1,6 +1,5 @@
 ﻿using TaleWorlds.CampaignSystem;
 using System.Linq;
-using Diplomacy.WarExhaustion;
 using Diplomacy;
 
 namespace WarAndAiTweaks.AI.Goals
@@ -25,11 +24,6 @@ namespace WarAndAiTweaks.AI.Goals
 
                 // Desperate State
                 if (kingdom.Fiefs.Count == 0) return StrategicState.Desperate;
-                if (Settings.Instance!.EnableWarExhaustion && WarExhaustionManager.Instance is { } wem)
-                {
-                    if (enemies.Max(enemy => wem.GetWarExhaustion(kingdom, enemy)) > CRITICAL_WAR_EXHAUSTION)
-                        return StrategicState.Desperate;
-                }
                 if (strengthRatioVsEnemies < 0.5f && kingdom.Fiefs.Count < 3)
                 {
                     return StrategicState.Desperate;

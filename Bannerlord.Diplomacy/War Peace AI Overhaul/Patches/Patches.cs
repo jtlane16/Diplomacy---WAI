@@ -1,18 +1,19 @@
-﻿using Diplomacy.WarExhaustion;
-
-using HarmonyLib;
+﻿using HarmonyLib;
 
 using Helpers;
 
 using LT_Nemesis;
 
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Settlements.Buildings;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
 using TaleWorlds.Library;
+
+using WarAndAiTweaks.AI.Behaviors;
 
 namespace Diplomacy.War_Peace_AI_Overhaul
 {
@@ -49,8 +50,7 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                 // This is a simplified version of the logic in StrategicAIBehavior for the player's perspective.
                 // You might want to expose the main behavior's method publicly if more complexity is needed.
                 var warProgress = (us.GetStanceWith(them)?.GetSuccessfulSieges(us) ?? 0) - (us.GetStanceWith(them)?.GetSuccessfulSieges(them) ?? 0);
-                var exhaustion = WarExhaustionManager.Instance?.GetWarExhaustion(us, them) ?? 0f;
-                return (exhaustion - (warProgress * 10)) > 60f; // Simplified threshold
+                return (warProgress * 10) > 60f; // Simplified threshold
             }
 
             public static bool Prefix(KingdomWarItemVM item)
@@ -67,6 +67,16 @@ namespace Diplomacy.War_Peace_AI_Overhaul
 
                 InformationManager.DisplayMessage(new InformationMessage($"{targetKingdom.Name} is not interested in peace at this time.", Colors.Red));
                 return false;
+            }
+        }
+        [HarmonyPatch(typeof(MakePeaceAction), "ApplyInternal")]
+        public class MakePeaceActionPatch
+        {
+            public static void Postfix(IFaction faction1, IFaction faction2, MakePeaceAction.MakePeaceDetail detail)
+            {
+                // We need a way to access the StrategicAICampaignBehavior instance.
+                var strategicAIBehavior = Campaign.Current.GetCampaignBehavior<StrategicAICampaignBehavior>();
+                strategicAIBehavior?.OnPeaceDeclared(faction1, faction2, detail);
             }
         }
     }

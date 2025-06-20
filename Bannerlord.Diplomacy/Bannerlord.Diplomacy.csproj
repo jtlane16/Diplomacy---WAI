@@ -89,14 +89,5 @@
             <Replacement>$(MCMVersion)</Replacement>
         </SubModuleOverrides>
     </ItemGroup>
-    <ItemGroup>
-      <Folder Include="OriginialModFiles\bin\x64\Stable_Release\net472\_Module\GUI\Prefabs\" />
-      <Folder Include="OriginialModFiles\bin\x64\Stable_Release\net6\_Module\GUI\Prefabs\" />
-      <Folder Include="OriginialModFiles\obj\x64\Release\net6\refint\" />
-      <Folder Include="OriginialModFiles\obj\x64\Release\net6\ref\" />
-    </ItemGroup>
-    <ItemGroup>
-      <None Include="OriginialModFiles\Bannerlord.Diplomacy.csproj" />
-    </ItemGroup>
 
 </Project>

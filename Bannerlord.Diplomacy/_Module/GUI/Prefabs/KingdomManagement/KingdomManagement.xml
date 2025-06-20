@@ -1,0 +1,38 @@
+﻿<!-- Modified KingdomManagement.xml to include Diplomacy Tab -->
+<!-- This should be added to your mod's GUI/Prefabs folder -->
+<Prefab>
+    <Window>
+        <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent">
+            <Children>
+                <!-- Existing Kingdom Management tabs... -->
+
+                <!-- Add Diplomacy Tab Button -->
+                <ButtonWidget Id="DiplomacyTabButton"
+                              WidthSizePolicy="Fixed"
+                              HeightSizePolicy="Fixed"
+                              SuggestedWidth="200"
+                              SuggestedHeight="40"
+                              Brush="Kingdom.Tab"
+                              Command.Click="SelectDiplomacyTab">
+                    <Children>
+                        <TextWidget WidthSizePolicy="StretchToParent"
+                                    HeightSizePolicy="StretchToParent"
+                                    Text="@DiplomacyTabText"
+                                    Brush="Kingdom.Tab.Text"/>
+                    </Children>
+                </ButtonWidget>
+
+                <!-- Diplomacy Panel Content -->
+                <Widget Id="DiplomacyPanel"
+                        WidthSizePolicy="StretchToParent"
+                        HeightSizePolicy="StretchToParent"
+                        IsVisible="@IsDiplomacySelected">
+                    <Children>
+                        <!-- Include your custom diplomacy panel -->
+                        <DiplomacyPanelCustom DataSource="{DiplomacyPanel}"/>
+                    </Children>
+                </Widget>
+            </Children>
+        </Widget>
+    </Window>
+</Prefab>

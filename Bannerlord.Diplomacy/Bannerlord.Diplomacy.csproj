@@ -90,13 +90,13 @@
         </SubModuleOverrides>
     </ItemGroup>
     <ItemGroup>
-      <None Include="OtherMode\Bannerlord.Diplomacy\Bannerlord.Diplomacy.csproj" />
+      <Folder Include="OriginialModFiles\bin\x64\Stable_Release\net472\_Module\GUI\Prefabs\" />
+      <Folder Include="OriginialModFiles\bin\x64\Stable_Release\net6\_Module\GUI\Prefabs\" />
+      <Folder Include="OriginialModFiles\obj\x64\Release\net6\refint\" />
+      <Folder Include="OriginialModFiles\obj\x64\Release\net6\ref\" />
     </ItemGroup>
     <ItemGroup>
-      <Folder Include="OtherMode\Bannerlord.Diplomacy\bin\x64\Stable_Release\net472\_Module\GUI\Prefabs\" />
-      <Folder Include="OtherMode\Bannerlord.Diplomacy\bin\x64\Stable_Release\net6\_Module\GUI\Prefabs\" />
-      <Folder Include="OtherMode\Bannerlord.Diplomacy\obj\x64\Release\net6\refint\" />
-      <Folder Include="OtherMode\Bannerlord.Diplomacy\obj\x64\Release\net6\ref\" />
+      <None Include="OriginialModFiles\Bannerlord.Diplomacy.csproj" />
     </ItemGroup>
 
 </Project>

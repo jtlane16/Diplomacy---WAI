@@ -1,0 +1,10 @@
+﻿<Prefab>
+    <Window>
+        <ButtonWidget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed" SuggestedWidth="550" SuggestedHeight="90" Brush="Kingdom.Item.Tuple" Command.Click="ExecuteLink" IsSelected="@IsSelected">
+            <Children>
+                <MaskedTextureWidget DataSource="{Faction1Visual}" WidthSizePolicy="Fixed" HeightSizePolicy="Fixed" SuggestedWidth="70" SuggestedHeight="70" Brush="Diplomacy.FlatBanner.Normal" ImageId="@Id" />
+                <RichTextWidget WidthSizePolicy="Fixed" SuggestedWidth="250" HeightSizePolicy="StretchToParent" Brush="ArmyManagement.Army.Tuple.Name" Text="@Name" />
+            </Children>
+        </ButtonWidget>
+    </Window>
+</Prefab>

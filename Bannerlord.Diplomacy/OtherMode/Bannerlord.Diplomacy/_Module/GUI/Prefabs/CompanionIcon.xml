@@ -1,0 +1,31 @@
+﻿<Widget IsVisible="@IsVisible" WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
+        SuggestedWidth="200" SuggestedHeight="50"
+        HorizontalAlignment="Left" VerticalAlignment="Top"
+        ScaledPositionXOffset="@PositionX" ScaledPositionYOffset="@PositionY">
+    <Children>
+        <!-- Icon + Companion Name above companion's head -->
+        <ListPanel WidthSizePolicy="Fixed" SuggestedWidth="200" HeightSizePolicy="Fixed" SuggestedHeight="50"
+                   LayoutImp.LayoutMethod="HorizontalLeftToRight"
+                   HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Children>
+                <!-- Companion Portrait Icon -->
+                <Widget VerticalAlignment="Center" HorizontalAlignment="Right"
+                        WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
+                        SuggestedWidth="@Width" SuggestedHeight="@Height">
+                    <Children>
+                        <ImageIdentifierWidget DataSource="{ImageIdentifier}"
+                                             WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent"
+                                             AdditionalArgs="@AdditionalArgs" ImageId="@Id" ImageTypeCode="@ImageTypeCode" />
+                    </Children>
+                </Widget>
+
+                <!-- Companion Name -->
+                <TextWidget WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent"
+                            VerticalAlignment="Center" MarginLeft="5"
+                            Brush="ChatLog.Text" Brush.TextHorizontalAlignment="Left"
+                            Brush.FontSize="@FontSize" Text="@CompanionName"
+                            Brush.FontColor="#00FF00FF" />
+            </Children>
+        </ListPanel>
+    </Children>
+</Widget>

@@ -4,6 +4,9 @@ using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Settlements;
 
+using WarAndAiTweaks;
+using WarAndAiTweaks.DiplomaticAction;
+
 // This namespace should be accessible by the rest of your code.
 namespace Diplomacy.Extensions
 {
@@ -65,6 +68,16 @@ namespace Diplomacy.Extensions
                 }
             }
             return borderingKingdoms;
+        }
+
+        /// <summary>
+        /// Gets all kingdoms allied with the given kingdom.
+        /// </summary>
+        public static IEnumerable<Kingdom> GetAlliedKingdoms(this Kingdom kingdom)
+        {
+            return DiplomaticAgreementManager.Alliances
+                .Where(a => a.Faction1 == kingdom || a.Faction2 == kingdom)
+                .Select(a => a.GetOtherKingdom(kingdom));
         }
     }
 }

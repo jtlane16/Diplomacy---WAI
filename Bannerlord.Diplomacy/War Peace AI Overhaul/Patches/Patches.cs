@@ -1,6 +1,4 @@
-﻿using Diplomacy.WarExhaustion;
-
-using HarmonyLib;
+﻿using HarmonyLib;
 
 using Helpers;
 
@@ -28,21 +26,21 @@ namespace Diplomacy.War_Peace_AI_Overhaul
         public class Patch_DisableRandomPeace { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
 
         [HarmonyPatch(typeof(Building), "GetBuildingEffectAmount")]
-	public class MilitiaPatch
-	{
-		// Token: 0x06000001 RID: 1 RVA: 0x00002048 File Offset: 0x00000248
-		static void Postfix(Building __instance, BuildingEffectEnum effect, ref float __result)
-		{
-			//If disabled, skip logic
+	    public class MilitiaPatch
+	    {
+		    // Token: 0x06000001 RID: 1 RVA: 0x00002048 File Offset: 0x00000248
+		    static void Postfix(Building __instance, BuildingEffectEnum effect, ref float __result)
+		    {
+			    //If disabled, skip logic
 
-			if (effect == BuildingEffectEnum.Militia && __instance.Name.ToString() == "Militia Grounds")
-			{
-				if (__instance.Town.IsCastle) { __result = __result + 5; }
-				if (__instance.Town.IsTown) { __result = __result + 10; }
-			}
-			return;
-		}
-	}
+			    if (effect == BuildingEffectEnum.Militia && __instance.Name.ToString() == "Militia Grounds")
+			    {
+				    if (__instance.Town.IsCastle) { __result = __result + 5; }
+				    if (__instance.Town.IsTown) { __result = __result + 10; }
+			    }
+			    return;
+		    }
+	    }
         [HarmonyPatch(typeof(KingdomDiplomacyVM), "OnDeclarePeace")]
         public class KingdomPlayerPeacePatch
         {
@@ -52,8 +50,7 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                 // This is a simplified version of the logic in StrategicAIBehavior for the player's perspective.
                 // You might want to expose the main behavior's method publicly if more complexity is needed.
                 var warProgress = (us.GetStanceWith(them)?.GetSuccessfulSieges(us) ?? 0) - (us.GetStanceWith(them)?.GetSuccessfulSieges(them) ?? 0);
-                var exhaustion = WarExhaustionManager.Instance?.GetWarExhaustion(us, them) ?? 0f;
-                return (exhaustion - (warProgress * 10)) > 60f; // Simplified threshold
+                return (warProgress * 10) > 60f; // Simplified threshold
             }
 
             public static bool Prefix(KingdomWarItemVM item)

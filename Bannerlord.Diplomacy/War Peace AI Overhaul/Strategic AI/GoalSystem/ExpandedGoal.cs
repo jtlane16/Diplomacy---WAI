@@ -45,7 +45,7 @@ namespace WarAndAiTweaks.AI.Goals
                 k != Kingdom &&
                 !Kingdom.IsAtWarWith(k) &&
                 !FactionManager.IsAlliedWithFaction(Kingdom, k) &&
-                !Diplomacy.DiplomaticAction.DiplomaticAgreementManager.HasNonAggressionPact(Kingdom, k, out _));
+                !DiplomaticAgreementManager.HasNonAggressionPact(Kingdom, k, out _));
 
             foreach (var k in candidates)
             {

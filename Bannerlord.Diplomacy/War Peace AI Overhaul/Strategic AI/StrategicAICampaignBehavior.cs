@@ -1,13 +1,18 @@
-﻿using System;
+﻿using Diplomacy.Extensions;
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using Diplomacy.DiplomaticAction;
+
 using Diplomacy.Extensions;
+
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.Core;
+using TaleWorlds.Library;
 using TaleWorlds.SaveSystem;
 using WarAndAiTweaks.AI.Goals;
-using TaleWorlds.CampaignSystem.Actions;
+
 using static WarAndAiTweaks.AI.StrategicAI;
 
 namespace WarAndAiTweaks.AI.Behaviors
@@ -38,8 +43,6 @@ namespace WarAndAiTweaks.AI.Behaviors
         public override void RegisterEvents()
         {
             CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
-            CampaignEvents.MakePeace.AddNonSerializedListener(this, OnPeaceDeclared);
-            CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
         }
 
         public void OnPeaceDeclared(IFaction faction1, IFaction faction2, MakePeaceAction.MakePeaceDetail detail)
@@ -58,6 +61,21 @@ namespace WarAndAiTweaks.AI.Behaviors
             var kingdoms = Kingdom.All.ToList();
             kingdoms.Shuffle();
             bool warDeclaredThisTick = false;
+
+            var expiredPacts = new List<NonAggressionPact>();
+            foreach (var pact in DiplomaticAgreementManager.NonAggressionPacts.ToList())
+            {
+                if (pact.StartDate.ElapsedDaysUntilNow >= 20)
+                {
+                    expiredPacts.Add(pact);
+                }
+            }
+
+            foreach (var pact in expiredPacts)
+            {
+                DiplomaticAgreementManager.BreakNonAggressionPact(pact.Faction1, pact.Faction2);
+                InformationManager.DisplayMessage(new InformationMessage($"The non-aggression pact between {pact.Faction1.Name} and {pact.Faction2.Name} has expired.", TaleWorlds.Library.Colors.Green));
+            }
 
             foreach (var kingdom in kingdoms)
             {
@@ -137,9 +155,10 @@ namespace WarAndAiTweaks.AI.Behaviors
                         }
                     }
 
+                    // If a weakest ally was found and conditions allow, break the alliance.
                     if (weakestAlly != null && Diplomacy.DiplomaticAction.Alliance.BreakAllianceConditions.Instance.CanApply(kingdom, weakestAlly))
                     {
-                        Diplomacy.DiplomaticAction.Alliance.BreakAllianceAction.Apply(kingdom, weakestAlly);
+                        DiplomaticAction.BreakAllianceAction.Apply(kingdom, weakestAlly);
                         AIComputationLogger.LogBetrayalDecision(kingdom, weakestAlly, highestBreakScore);
                         continue;
                     }

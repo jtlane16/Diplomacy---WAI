@@ -14,6 +14,7 @@ using TaleWorlds.SaveSystem;
 using WarAndAiTweaks.AI.Goals;
 
 using static WarAndAiTweaks.AI.StrategicAI;
+using WarAndAiTweaks.DiplomaticAction;
 
 namespace WarAndAiTweaks.AI.Behaviors
 {
@@ -156,7 +157,7 @@ namespace WarAndAiTweaks.AI.Behaviors
                     }
 
                     // If a weakest ally was found and conditions allow, break the alliance.
-                    if (weakestAlly != null && Diplomacy.DiplomaticAction.Alliance.BreakAllianceConditions.Instance.CanApply(kingdom, weakestAlly))
+                    if (weakestAlly != null)
                     {
                         DiplomaticAction.BreakAllianceAction.Apply(kingdom, weakestAlly);
                         AIComputationLogger.LogBetrayalDecision(kingdom, weakestAlly, highestBreakScore);

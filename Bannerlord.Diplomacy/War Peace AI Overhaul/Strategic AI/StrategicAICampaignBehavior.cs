@@ -1,16 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-
 using Diplomacy.DiplomaticAction;
 using Diplomacy.Extensions;
-
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.SaveSystem;
-
 using WarAndAiTweaks.AI.Goals;
-
+using TaleWorlds.CampaignSystem.Actions;
 using static WarAndAiTweaks.AI.StrategicAI;
 
 namespace WarAndAiTweaks.AI.Behaviors
@@ -32,12 +29,28 @@ namespace WarAndAiTweaks.AI.Behaviors
         [SaveableField(1006)]
         private Dictionary<string, StrategicState> _kingdomStrategicStates = new Dictionary<string, StrategicState>();
 
+        [SaveableField(1007)]
+        private Dictionary<string, CampaignTime> _lastPeaceTimes = new Dictionary<string, CampaignTime>();
+
         private IWarEvaluator _warEvaluator = new StrategicAI.DefaultWarEvaluator();
         private IPeaceEvaluator _peaceEvaluator = new StrategicAI.DefaultPeaceEvaluator();
 
         public override void RegisterEvents()
         {
             CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
+            CampaignEvents.MakePeace.AddNonSerializedListener(this, OnPeaceDeclared);
+            CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
+        }
+
+        public void OnPeaceDeclared(IFaction faction1, IFaction faction2, MakePeaceAction.MakePeaceDetail detail)
+        {
+            if (faction1 is Kingdom k1 && faction2 is Kingdom k2)
+            {
+                var key = (string.Compare(k1.StringId, k2.StringId) < 0)
+                    ? $"{k1.StringId}_{k2.StringId}"
+                    : $"{k2.StringId}_{k1.StringId}";
+                _lastPeaceTimes[key] = CampaignTime.Now;
+            }
         }
 
         private void OnDailyTick()
@@ -48,7 +61,6 @@ namespace WarAndAiTweaks.AI.Behaviors
 
             foreach (var kingdom in kingdoms)
             {
-                // CORRECTED LOGIC: AI will not run for a kingdom if the player is its leader.
                 if (kingdom.IsEliminated || kingdom.Leader == Hero.MainHero)
                 {
                     continue;
@@ -88,17 +100,16 @@ namespace WarAndAiTweaks.AI.Behaviors
                 var strategicState = StrategicStateEvaluator.GetStrategicState(kingdom);
                 _kingdomStrategicStates[kingdomId] = strategicState;
 
-                // ADDED: Log diplomatic overview
                 var enemies = FactionManager.GetEnemyKingdoms(kingdom).ToList();
                 var allies = kingdom.GetAlliedKingdoms().ToList();
                 var pacts = DiplomaticAgreementManager.GetPacts(kingdom).ToList();
                 var bordering = kingdom.GetBorderingKingdoms().ToList();
                 AIComputationLogger.LogDiplomaticOverview(kingdom, strategicState, enemies, allies, pacts, bordering);
 
-                var currentGoal = GoalEvaluator.GetHighestPriorityGoal(kingdom, _peaceDays[kingdomId], _warDays[kingdomId], strategicState);
+                var currentGoal = GoalEvaluator.GetHighestPriorityGoal(kingdom, _peaceDays[kingdomId], _warDays[kingdomId], strategicState, _lastPeaceTimes);
                 AIComputationLogger.LogAIGoal(kingdom, currentGoal, strategicState);
 
-                var ai = new StrategicAI(kingdom, _warEvaluator, _peaceEvaluator, currentGoal)
+                var ai = new StrategicAI(kingdom, _warEvaluator, _peaceEvaluator, currentGoal, _lastPeaceTimes)
                 {
                     DaysSinceLastWar = _peaceDays[kingdomId],
                     DaysAtWar = _warDays[kingdomId]
@@ -118,7 +129,6 @@ namespace WarAndAiTweaks.AI.Behaviors
 
                     foreach (var ally in currentAllies)
                     {
-                        // The higher the score from this model, the more the AI wants to break the alliance.
                         var breakScore = breakAllianceScoringModel.GetBreakAllianceScore(kingdom, ally).ResultNumber;
                         if (breakScore > highestBreakScore)
                         {
@@ -127,12 +137,10 @@ namespace WarAndAiTweaks.AI.Behaviors
                         }
                     }
 
-                    // If a weakest ally was found and conditions allow, break the alliance.
                     if (weakestAlly != null && Diplomacy.DiplomaticAction.Alliance.BreakAllianceConditions.Instance.CanApply(kingdom, weakestAlly))
                     {
                         Diplomacy.DiplomaticAction.Alliance.BreakAllianceAction.Apply(kingdom, weakestAlly);
                         AIComputationLogger.LogBetrayalDecision(kingdom, weakestAlly, highestBreakScore);
-                        // By continuing, we ensure the AI only performs one major diplomatic action per day.
                         continue;
                     }
                 }
@@ -146,12 +154,14 @@ namespace WarAndAiTweaks.AI.Behaviors
             dataStore.SyncData("_daysSinceLastThinkPerKingdom", ref _daysSinceLastThinkPerKingdom);
             dataStore.SyncData("_thinkIntervalPerKingdom", ref _thinkIntervalPerKingdom);
             dataStore.SyncData("_kingdomStrategicStates", ref _kingdomStrategicStates);
+            dataStore.SyncData("_lastPeaceTimes", ref _lastPeaceTimes);
 
             if (dataStore.IsLoading)
             {
                 _daysSinceLastThinkPerKingdom ??= new Dictionary<string, int>();
                 _thinkIntervalPerKingdom ??= new Dictionary<string, int>();
                 _kingdomStrategicStates ??= new Dictionary<string, StrategicState>();
+                _lastPeaceTimes ??= new Dictionary<string, CampaignTime>();
             }
         }
     }

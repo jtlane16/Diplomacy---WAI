@@ -7,12 +7,15 @@ using Helpers;
 using LT_Nemesis;
 
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Settlements.Buildings;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
 using TaleWorlds.Library;
+
+using WarAndAiTweaks.AI.Behaviors;
 
 namespace Diplomacy.War_Peace_AI_Overhaul
 {
@@ -67,6 +70,16 @@ namespace Diplomacy.War_Peace_AI_Overhaul
 
                 InformationManager.DisplayMessage(new InformationMessage($"{targetKingdom.Name} is not interested in peace at this time.", Colors.Red));
                 return false;
+            }
+        }
+        [HarmonyPatch(typeof(MakePeaceAction), "ApplyInternal")]
+        public class MakePeaceActionPatch
+        {
+            public static void Postfix(IFaction faction1, IFaction faction2, MakePeaceAction.MakePeaceDetail detail)
+            {
+                // We need a way to access the StrategicAICampaignBehavior instance.
+                var strategicAIBehavior = Campaign.Current.GetCampaignBehavior<StrategicAICampaignBehavior>();
+                strategicAIBehavior?.OnPeaceDeclared(faction1, faction2, detail);
             }
         }
     }

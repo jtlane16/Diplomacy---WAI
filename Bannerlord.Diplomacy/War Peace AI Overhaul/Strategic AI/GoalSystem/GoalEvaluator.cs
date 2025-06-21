@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿// In: Bannerlord.Diplomacy/War Peace AI Overhaul/Strategic AI/GoalSystem/GoalEvaluator.cs
+
+using System.Collections.Generic;
 using System.Linq;
 
 using TaleWorlds.CampaignSystem;
@@ -11,14 +13,14 @@ namespace WarAndAiTweaks.AI
 {
     public static class GoalEvaluator
     {
-        public static AIGoal GetHighestPriorityGoal(Kingdom kingdom, int daysSinceLastWar, int daysAtWar, StrategicState strategicState)
+        public static AIGoal GetHighestPriorityGoal(Kingdom kingdom, int daysSinceLastWar, int daysAtWar, StrategicState strategicState, Dictionary<string, CampaignTime> lastPeaceTimes)
         {
             var warEvaluator = new DefaultWarEvaluator();
             var peaceEvaluator = new DefaultPeaceEvaluator();
 
             var potentialGoals = new List<AIGoal>
             {
-                new ExpandGoal(kingdom, warEvaluator, daysSinceLastWar, daysAtWar),
+                new ExpandGoal(kingdom, warEvaluator, daysSinceLastWar, daysAtWar, lastPeaceTimes),
                 new SurviveGoal(kingdom, peaceEvaluator),
                 new StrengthenGoal(kingdom)
             };
@@ -27,14 +29,11 @@ namespace WarAndAiTweaks.AI
             {
                 goal.EvaluatePriority();
 
-                // CORRECTED LOGIC: A kingdom at peace should never have "Survive" as its goal.
-                // Apply a massive penalty to the Survive goal if the kingdom is not at war.
                 if (goal.Type == GoalType.Survive && !FactionManager.GetEnemyKingdoms(kingdom).Any())
                 {
                     goal.Priority = -1000f;
                 }
 
-                // Adjust priority based on strategic state
                 switch (strategicState)
                 {
                     case StrategicState.Desperate:
@@ -49,12 +48,10 @@ namespace WarAndAiTweaks.AI
                         if (goal.Type == GoalType.Expand) goal.Priority += 50;
                         break;
                     case StrategicState.Opportunistic:
-                        // No changes
                         break;
                 }
             }
 
-            // ADDED: Log the priorities of all evaluated goals before selecting the best one.
             AIComputationLogger.LogGoalEvaluation(kingdom, potentialGoals);
 
             return potentialGoals.OrderByDescending(g => g.Priority).First();

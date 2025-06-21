@@ -1,5 +1,7 @@
 ﻿using Bannerlord.UIExtenderEx;
 
+using CompanionHighlighter;
+
 using HarmonyLib;
 
 using TaleWorlds.CampaignSystem;
@@ -32,6 +34,16 @@ namespace WarAndAiTweaks
             var extender = new UIExtender("WarAndAiTweaks.DiplomacyUI");
             extender.Register(typeof(SubModule).Assembly);
             extender.Enable();
+        }
+
+        public override void OnMissionBehaviorInitialize(Mission mission)
+        {
+            base.OnMissionBehaviorInitialize(mission);
+            if (mission.PlayerTeam != null)
+            {
+                mission.AddMissionBehavior(new CompanionMissionLogic());
+                mission.AddMissionBehavior(new CompanionMissionView());
+            }
         }
 
         protected override void OnGameStart(Game game, IGameStarter gameStarter)

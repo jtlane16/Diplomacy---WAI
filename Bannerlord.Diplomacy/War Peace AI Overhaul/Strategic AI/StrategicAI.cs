@@ -87,6 +87,7 @@ namespace WarAndAiTweaks.AI
                 {
                     BreakAllianceAction.Apply(_owner, weakestAlly);
                     AIComputationLogger.LogBetrayalDecision(_owner, weakestAlly, highestBreakScore);
+                    InformationManager.DisplayMessage(new InformationMessage($"{_owner.Name} has broken their alliance with {weakestAlly.Name}."));
                     return;
                 }
             }
@@ -106,6 +107,7 @@ namespace WarAndAiTweaks.AI
                     {
                         BreakAllianceAction.Apply(_owner, bestAllyToBetray);
                         AIComputationLogger.LogBetrayalDecision(_owner, bestAllyToBetray, betrayalScoringModel.GetBreakAllianceScore(_owner, bestAllyToBetray).ResultNumber);
+                        InformationManager.DisplayMessage(new InformationMessage($"{_owner.Name} has broken their alliance with {bestAllyToBetray.Name}."));
                     }
                 }
             }
@@ -143,6 +145,7 @@ namespace WarAndAiTweaks.AI
                 {
                     DiplomaticAction.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
                     AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
+                    InformationManager.DisplayMessage(new InformationMessage($"{_owner.Name} has formed an alliance with {bestAllianceCandidate.Name}!"));
                 }
                 return;
             }
@@ -174,6 +177,7 @@ namespace WarAndAiTweaks.AI
                 {
                     DiplomaticAction.FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
                     AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
+                    InformationManager.DisplayMessage(new InformationMessage($"The {_owner.Name} has formed a non-aggression pact with the {bestNapCandidate.Name}."));
                 }
                 return;
             }

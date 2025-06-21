@@ -4,6 +4,8 @@ using CompanionHighlighter;
 
 using HarmonyLib;
 
+using System.Linq;
+
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.Library;

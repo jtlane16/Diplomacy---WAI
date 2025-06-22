@@ -11,8 +11,6 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
 using WarAndAiTweaks.AI.Goals;
-using WarAndAiTweaks.DiplomaticAction.Alliance;
-using WarAndAiTweaks.DiplomaticAgreements;
 
 using TWMathF = TaleWorlds.Library.MathF;
 

@@ -387,10 +387,6 @@ namespace WarAndAiTweaks.AI
                 float allianceTerritoryScore = allianceShare * (AllianceTerritoryWeight / 100f);
                 explainedNumber.Add(allianceTerritoryScore, new TextObject("Alliance Territory Score"));
 
-                float casualtiesRatio = b.GetCasualties() / (b.TotalStrength + 1f);
-                float warWeaknessScore = casualtiesRatio * WarWeaknessWeight;
-                explainedNumber.Add(warWeaknessScore, new TextObject("Target War Weariness"));
-
                 if (WarAndAiTweaks.DiplomaticAction.InfamyManager.Instance != null)
                 {
                     float infamy = WarAndAiTweaks.DiplomaticAction.InfamyManager.Instance.GetInfamy(a);
@@ -437,8 +433,6 @@ namespace WarAndAiTweaks.AI
                 // MODIFICATION HERE: Changed 180f to 40f to accelerate peace desire.
                 float warDurationFactor = Math.Min(daysAtWar / 40f, 1.0f);
                 explainedNumber.Add(warDurationFactor * 100f * (WarDurationWeight / 100f), new TextObject("{=XIPMI3gR}War Duration"));
-                float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
-                explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("Casualties"));
 
                 int fiefsLost = stance.GetSuccessfulSieges(enemy);
                 explainedNumber.Add(fiefsLost * 5f * (FiefLossWeight / 100f), new TextObject("{=DrNBDhx3}Fiefs Lost"));

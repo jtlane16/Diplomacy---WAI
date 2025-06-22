@@ -97,9 +97,6 @@ namespace WarAndAiTweaks.AI
             int borders = p.Settlements.Count(s => s.IsBorderSettlementWith(c));
             en.Add(TWMathF.Clamp(borders * 10f, 0f, 100f) * BorderWeight / Total, new TextObject("borders"));
 
-            float recovery = p.GetCasualties() / (proposerStrength + 1f);
-            en.Add(recovery * 100f * RecoveryWeight / Total, new TextObject("recovery"));
-
             AIComputationLogger.LogPactCandidate(p, c, en);
             return en;
         }

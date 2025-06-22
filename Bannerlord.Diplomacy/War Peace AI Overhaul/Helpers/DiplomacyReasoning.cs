@@ -64,30 +64,24 @@ namespace WarAndAiTweaks.AI
         /// "{KINGDOM} makes peace with {TARGET} because {REASON}."
         /// </summary>
         public static string PeaceNotification(Kingdom k, Kingdom enemy,
-                                               DefaultPeaceEvaluator eval)
+                                       DefaultPeaceEvaluator eval)
         {
-            float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
             int fronts = FactionManager.GetEnemyKingdoms(k).Count();
 
             var sb = new StringBuilder();
 
-            sb.Append(casualtiesRatio switch
-            {
-                > 0.5f => "its army has taken severe losses",
-                > 0.25f => "casualties are mounting",
-                _ => "it seeks a strategic pause"
-            });
+            sb.Append("it seeks a strategic pause");
 
             if (fronts > 1)
                 sb.Append($" while fighting on {fronts} fronts");
 
 #if DIPOLOMACY_WAR_EXHAUSTION
-            if (Diplomacy.WarExhaustion.WarExhaustionManager.Instance is { } wem &&
-                wem.IsEnabled &&
-                wem.TryGetWarExhaustion(k, enemy, out var we) && we > 50f)
-            {
-                sb.Append(", war exhaustion is high");
-            }
+    if (Diplomacy.WarExhaustion.WarExhaustionManager.Instance is { } wem &&
+        wem.IsEnabled &&
+        wem.TryGetWarExhaustion(k, enemy, out var we) && we > 50f)
+    {
+        sb.Append(", war exhaustion is high");
+    }
 #endif
             return new TextObject("{=notif_peace}{KINGDOM} makes peace with {TARGET} because {REASON}.")
                    .SetTextVariable("KINGDOM", k.Name)

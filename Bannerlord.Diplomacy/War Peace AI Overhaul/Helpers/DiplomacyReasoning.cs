@@ -75,14 +75,6 @@ namespace WarAndAiTweaks.AI
             if (fronts > 1)
                 sb.Append($" while fighting on {fronts} fronts");
 
-#if DIPOLOMACY_WAR_EXHAUSTION
-    if (Diplomacy.WarExhaustion.WarExhaustionManager.Instance is { } wem &&
-        wem.IsEnabled &&
-        wem.TryGetWarExhaustion(k, enemy, out var we) && we > 50f)
-    {
-        sb.Append(", war exhaustion is high");
-    }
-#endif
             return new TextObject("{=notif_peace}{KINGDOM} makes peace with {TARGET} because {REASON}.")
                    .SetTextVariable("KINGDOM", k.Name)
                    .SetTextVariable("TARGET", enemy.Name)

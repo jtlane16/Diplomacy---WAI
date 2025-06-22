@@ -19,6 +19,7 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         AddClassDefinition(typeof(Alliance), 3);
         AddClassDefinition(typeof(NonAggressionPact), 4);
         AddClassDefinition(typeof(DiplomaticAgreement), 5);
+        AddClassDefinition(typeof(InfamyManager), 6); // Add this line
     }
 
     protected override void DefineContainerDefinitions()
@@ -28,6 +29,7 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         ConstructContainerDefinition(typeof(Dictionary<string, int>));
         ConstructContainerDefinition(typeof(Dictionary<string, StrategicState>));
         ConstructContainerDefinition(typeof(Dictionary<string, CampaignTime>));
+        ConstructContainerDefinition(typeof(Dictionary<Kingdom, float>)); // Add this line
     }
 
     protected override void DefineEnumTypes()

@@ -10,6 +10,7 @@ using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
 
 using WarAndAiTweaks.AI.Behaviors;
+using WarAndAiTweaks.DiplomaticAction;
 
 namespace WarAndAiTweaks
 {
@@ -44,6 +45,8 @@ namespace WarAndAiTweaks
                 var campaignStarter = (CampaignGameStarter) gameStarter;
                 campaignStarter.AddBehavior(new StrategicAICampaignBehavior());
                 campaignStarter.AddBehavior(new DiplomaticAgreementManager());
+                campaignStarter.AddBehavior(new InfamyManager()); // Add this line
+
             }
         }
 

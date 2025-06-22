@@ -310,11 +310,11 @@ namespace WarAndAiTweaks.AI
             private const float SnowballBonus = 30f;
             private const float TerritoryWeight = 25f;
             private const float AllianceTerritoryWeight = 15f;
-            private const float EconomyWeight = 20f;
             private const float WarWeaknessWeight = 20f;
             private const float SharedBorderBonus = 30f;
             private const float NoSharedBorderPenalty = -100f;
             private const float RECENT_PEACE_PENALTY_MAX = -200f;
+            private const float INFAMY_PENALTY_MAX = -100f;
 
             public ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar, Dictionary<string, CampaignTime> lastPeaceTimes)
             {
@@ -391,6 +391,16 @@ namespace WarAndAiTweaks.AI
                 float warWeaknessScore = casualtiesRatio * WarWeaknessWeight;
                 explainedNumber.Add(warWeaknessScore, new TextObject("Target War Weariness"));
 
+                if (WarAndAiTweaks.DiplomaticAction.InfamyManager.Instance != null)
+                {
+                    float infamy = WarAndAiTweaks.DiplomaticAction.InfamyManager.Instance.GetInfamy(a);
+                    if (infamy > 10)
+                    {
+                        var penalty = Math.Min(infamy, 100) / 100f * INFAMY_PENALTY_MAX;
+                        explainedNumber.Add(penalty, new TextObject("High Infamy"));
+                    }
+                }
+
                 return explainedNumber;
             }
 
@@ -414,6 +424,8 @@ namespace WarAndAiTweaks.AI
             private const float WarExhaustionWeight = 40f;
             private const float WarDurationWeight = 20f;
             private const float FiefLossWeight = 10f;
+            private const float DistanceWeight = 50f;
+            private const float MaxDistance = 1500f;
 
             public ExplainedNumber GetPeaceScore(Kingdom k, Kingdom enemy)
             {
@@ -422,7 +434,8 @@ namespace WarAndAiTweaks.AI
                 if (stance == null || !stance.IsAtWar) return explainedNumber;
 
                 var daysAtWar = stance.WarStartDate.ElapsedDaysUntilNow;
-                float warDurationFactor = Math.Min(daysAtWar / 180f, 1.0f);
+                // MODIFICATION HERE: Changed 180f to 40f to accelerate peace desire.
+                float warDurationFactor = Math.Min(daysAtWar / 40f, 1.0f);
                 explainedNumber.Add(warDurationFactor * 100f * (WarDurationWeight / 100f), new TextObject("{=XIPMI3gR}War Duration"));
                 float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
                 explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("Casualties"));
@@ -430,7 +443,24 @@ namespace WarAndAiTweaks.AI
                 int fiefsLost = stance.GetSuccessfulSieges(enemy);
                 explainedNumber.Add(fiefsLost * 5f * (FiefLossWeight / 100f), new TextObject("{=DrNBDhx3}Fiefs Lost"));
 
+                // Added Distance Bonus
+                float distBonus = ComputeDistanceBonus(k, enemy);
+                explainedNumber.Add(distBonus, new TextObject("Distance Bonus"));
+
                 return explainedNumber;
+            }
+
+            private float ComputeDistanceBonus(Kingdom a, Kingdom b)
+            {
+                var aList = a.Settlements.ToList();
+                var bList = b.Settlements.ToList();
+                if (!aList.Any() || !bList.Any())
+                    return 0f;
+
+                var posA = new Vec2(aList.Average(s => s.Position2D.X), aList.Average(s => s.Position2D.Y));
+                var posB = new Vec2(bList.Average(s => s.Position2D.X), bList.Average(s => s.Position2D.Y));
+                float dist = posA.Distance(posB);
+                return TWMathF.Clamp(dist / MaxDistance, 0f, 1f) * DistanceWeight;
             }
         }
     }

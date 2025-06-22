@@ -26,10 +26,21 @@ namespace WarAndAiTweaks.AI
                 en.Add(-1000f, new TextObject("{=K78W292D}Already in an Alliance"));
             }
 
-            int sharedEnemies = FactionManager.GetEnemyKingdoms(proposer).Intersect(FactionManager.GetEnemyKingdoms(candidate)).Count();
+            // Underdog bonus
+            var enemyKingdomsOfCandidate = FactionManager.GetEnemyKingdoms(candidate).ToList();
+            if (enemyKingdomsOfCandidate.Count > 2)
+            {
+                float totalEnemyStrength = enemyKingdomsOfCandidate.Sum(k => k.TotalStrength);
+                if (candidate.TotalStrength < totalEnemyStrength * 0.5f)
+                {
+                    en.Add(30f, new TextObject("Defending the Underdog"));
+                }
+            }
+
+            int sharedEnemies = FactionManager.GetEnemyKingdoms(proposer).Intersect(enemyKingdomsOfCandidate).Count();
             en.Add(TWMathF.Clamp(sharedEnemies * 25f, 0f, 100f) * SharedEnemyWeight / TotalWeight, new TextObject("shared enemies"));
 
-            var enemyKingdoms = FactionManager.GetEnemyKingdoms(proposer).Concat(FactionManager.GetEnemyKingdoms(candidate));
+            var enemyKingdoms = FactionManager.GetEnemyKingdoms(proposer).Concat(enemyKingdomsOfCandidate);
             float maxEnemyStrength = enemyKingdoms.Any() ? enemyKingdoms.Max(k => k.TotalStrength) : 1f;
             float synergy = (proposer.TotalStrength + candidate.TotalStrength) / maxEnemyStrength;
             en.Add(TWMathF.Clamp(synergy, 0f, 2f) * 50f * StrengthSynergyWeight / TotalWeight, new TextObject("strength synergy"));
@@ -58,7 +69,14 @@ namespace WarAndAiTweaks.AI
         public ExplainedNumber GetPactScore(Kingdom p, Kingdom c)
         {
             var en = new ExplainedNumber(0f, true);
-            if (p == c || p.IsAtWarWith(c) ||DiplomaticAgreementManager.HasNonAggressionPact(p, c, out _)) return en;
+            if (p == c || p.IsAtWarWith(c) || DiplomaticAgreementManager.HasNonAggressionPact(p, c, out _)) return en;
+
+            // If the only potential war target is the candidate, penalize the score
+            var otherKingdoms = Kingdom.All.Where(k => k != p && !k.IsEliminated && !p.IsAtWarWith(k) && !FactionManager.IsAlliedWithFaction(p, k) && !DiplomaticAgreementManager.HasNonAggressionPact(p, k, out _));
+            if (otherKingdoms.Count() == 1 && otherKingdoms.First() == c)
+            {
+                en.Add(-50f, new TextObject("Last Potential Target"));
+            }
 
             float proposerStrength = p.TotalStrength;
             float candidateStrength = c.TotalStrength;
@@ -96,6 +114,12 @@ namespace WarAndAiTweaks.AI
         {
             var en = new ExplainedNumber(0f, true);
             if (!FactionManager.IsAlliedWithFaction(breaker, ally)) return en;
+
+            var otherKingdoms = Kingdom.All.Where(k => k != breaker && !k.IsEliminated && !breaker.IsAtWarWith(k) && !FactionManager.IsAlliedWithFaction(breaker, k));
+            if (otherKingdoms.Count() == 1 && otherKingdoms.First() == ally)
+            {
+                en.Add(50f, new TextObject("Sole Target for Expansion"));
+            }
 
             en.Add(30f, new TextObject("{=betrayal_base}Desire for new territory"));
 

@@ -37,12 +37,31 @@ namespace WarAndAiTweaks.AI.Behaviors
         [SaveableField(1007)]
         private Dictionary<string, CampaignTime> _lastPeaceTimes = new Dictionary<string, CampaignTime>();
 
-        private IWarEvaluator _warEvaluator = new StrategicAI.DefaultWarEvaluator();
-        private IPeaceEvaluator _peaceEvaluator = new StrategicAI.DefaultPeaceEvaluator();
+        private IWarEvaluator _warEvaluator = new DefaultWarEvaluator();
+        private IPeaceEvaluator _peaceEvaluator = new DefaultPeaceEvaluator();
 
         public override void RegisterEvents()
         {
             CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
+            CampaignEvents.WarDeclared.AddNonSerializedListener(this, OnWarDeclared);
+        }
+
+        private void OnWarDeclared(IFaction faction1, IFaction faction2, DeclareWarAction.DeclareWarDetail detail)
+        {
+            // faction1 is the aggressor, faction2 is the defender.
+            if (faction2 is Kingdom defender)
+            {
+                var alliesOfDefender = defender.GetAlliedKingdoms().ToList();
+                foreach (var ally in alliesOfDefender)
+                {
+                    // If the ally is not already at war with the aggressor, they join the defensive war.
+                    if (!ally.IsAtWarWith(faction1))
+                    {
+                        DeclareWarAction.ApplyByDefault(ally, faction1);
+                        InformationManager.DisplayMessage(new InformationMessage($"{ally.Name} has joined the war against {faction1.Name} in defense of {defender.Name}.", Colors.Green));
+                    }
+                }
+            }
         }
 
         public void OnPeaceDeclared(IFaction faction1, IFaction faction2, MakePeaceAction.MakePeaceDetail detail)
@@ -74,7 +93,7 @@ namespace WarAndAiTweaks.AI.Behaviors
             foreach (var pact in expiredPacts)
             {
                 DiplomaticAgreementManager.BreakNonAggressionPact(pact.Faction1, pact.Faction2);
-                InformationManager.DisplayMessage(new InformationMessage($"The non-aggression pact between {pact.Faction1.Name} and {pact.Faction2.Name} has expired.", TaleWorlds.Library.Colors.Green));
+                InformationManager.DisplayMessage(new InformationMessage($"The non-aggression pact between {pact.Faction1.Name} and {pact.Faction2.Name} has expired.", Colors.Green));
             }
 
             foreach (var kingdom in kingdoms)

@@ -123,28 +123,9 @@ namespace WarAndAiTweaks.AI
 
             if (bestAllianceCandidate != null && allianceScoringModel.ShouldTakeActionBidirectional(_owner, bestAllianceCandidate, 60f))
             {
-                if (bestAllianceCandidate.Leader == Hero.MainHero)
-                {
-                    var inquiryTitle = new TextObject("{=3pbwc8sh}Alliance Proposal");
-                    var inquiryText = new TextObject("{=QbOqatd7}{KINGDOM} is proposing an alliance with {PLAYER_KINGDOM}.")
-                        .SetTextVariable("KINGDOM", _owner.Name)
-                        .SetTextVariable("PLAYER_KINGDOM", bestAllianceCandidate.Name);
-
-                    InformationManager.ShowInquiry(new InquiryData(inquiryTitle.ToString(), inquiryText.ToString(), true, true, new TextObject("{=3fTqLwkC}Accept").ToString(), new TextObject("{=dRoMejb0}Decline").ToString(),
-                        () => {
-                            DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
-                            AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
-                        },
-                        () => {
-                            AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, false, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
-                        }));
-                }
-                else
-                {
-                    DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
-                    AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
-                }
-                return;
+                Diplomacy.DiplomaticAction.Alliance.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
+                AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
+                return; // Only do one diplomatic action per day.
             }
 
             var bestNapCandidate = Kingdom.All
@@ -294,20 +275,7 @@ namespace WarAndAiTweaks.AI
             {
                 ExplainedNumber explainedNumber = new ExplainedNumber(0f, true);
 
-                var key = (string.Compare(a.StringId, b.StringId) < 0) ? $"{a.StringId}_{b.StringId}" : $"{b.StringId}_{a.StringId}";
-                if (lastPeaceTimes.TryGetValue(key, out var peaceTime))
-                {
-                    float elapsedDaysSincePeace = peaceTime.ElapsedDaysUntilNow;
-                    float cooldownDays = 20f;
-
-                    if (elapsedDaysSincePeace < cooldownDays)
-                    {
-                        float penaltyRatio = (cooldownDays - elapsedDaysSincePeace) / cooldownDays;
-                        float penalty = RECENT_PEACE_PENALTY_MAX * penaltyRatio;
-                        explainedNumber.Add(penalty, new TextObject("Recent Peace Treaty"));
-                    }
-                }
-
+                // MODIFIED: War Desire is now calculated and added directly here.
                 float warDesire = Math.Min(daysSinceLastWar * MAX_WAR_DESIRE / WAR_DESIRE_RAMP_DAYS, MAX_WAR_DESIRE);
                 if (warDesire > 0)
                 {
@@ -400,8 +368,18 @@ namespace WarAndAiTweaks.AI
                 var daysAtWar = stance.WarStartDate.ElapsedDaysUntilNow;
                 float warDurationFactor = Math.Min(daysAtWar / 180f, 1.0f);
                 explainedNumber.Add(warDurationFactor * 100f * (WarDurationWeight / 100f), new TextObject("{=XIPMI3gR}War Duration"));
-                float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
-                explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("Casualties"));
+
+                // War Exhaustion (if enabled)
+                if (Settings.Instance!.EnableWarExhaustion && WarExhaustionManager.Instance is { } wem)
+                {
+                    float exhaustion = wem.GetWarExhaustion(k, enemy);
+                    explainedNumber.Add(exhaustion * (WarExhaustionWeight / 100f), new TextObject("{=V542tneW}War Exhaustion"));
+                }
+                else // Fallback to casualties if exhaustion is disabled
+                {
+                    float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
+                    explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("Casualties"));
+                }
 
                 int fiefsLost = stance.GetSuccessfulSieges(enemy);
                 explainedNumber.Add(fiefsLost * 5f * (FiefLossWeight / 100f), new TextObject("{=DrNBDhx3}Fiefs Lost"));

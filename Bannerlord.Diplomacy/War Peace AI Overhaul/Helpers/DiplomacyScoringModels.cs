@@ -3,7 +3,6 @@ using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.Localization;
-using static WarAndAiTweaks.AI.StrategicAI;
 using TWMathF = TaleWorlds.Library.MathF;
 
 namespace WarAndAiTweaks.AI

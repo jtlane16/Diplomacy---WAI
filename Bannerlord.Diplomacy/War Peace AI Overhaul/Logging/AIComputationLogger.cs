@@ -4,10 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Diplomacy.Extensions;
-
 using TaleWorlds.CampaignSystem;
-using TaleWorlds.Library;
-
 using WarAndAiTweaks.AI.Goals;
 using WarAndAiTweaks.DiplomaticAction;
 

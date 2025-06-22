@@ -9,9 +9,7 @@ using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.SaveSystem;
-
 using WarAndAiTweaks.AI.Goals;
-using WarAndAiTweaks.DiplomaticAction;
 
 using static WarAndAiTweaks.AI.StrategicAI;
 
@@ -43,7 +41,6 @@ namespace WarAndAiTweaks.AI.Behaviors
         public override void RegisterEvents()
         {
             CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
-            CampaignEvents.MakePeace.AddNonSerializedListener(this, OnPeaceDeclared);
         }
 
         public void OnPeaceDeclared(IFaction faction1, IFaction faction2, MakePeaceAction.MakePeaceDetail detail)
@@ -156,7 +153,8 @@ namespace WarAndAiTweaks.AI.Behaviors
                         }
                     }
 
-                    if (weakestAlly != null)
+                    // If a weakest ally was found and conditions allow, break the alliance.
+                    if (weakestAlly != null && Diplomacy.DiplomaticAction.Alliance.BreakAllianceConditions.Instance.CanApply(kingdom, weakestAlly))
                     {
                         DiplomaticAction.BreakAllianceAction.Apply(kingdom, weakestAlly);
                         AIComputationLogger.LogBetrayalDecision(kingdom, weakestAlly, highestBreakScore);

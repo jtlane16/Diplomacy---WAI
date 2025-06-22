@@ -11,6 +11,8 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
 using WarAndAiTweaks.AI.Goals;
+using WarAndAiTweaks.DiplomaticAction.Alliance;
+using WarAndAiTweaks.DiplomaticAgreements;
 
 using TWMathF = TaleWorlds.Library.MathF;
 
@@ -69,7 +71,7 @@ namespace WarAndAiTweaks.AI
             var currentAllies = _owner.GetAlliedKingdoms().ToList();
             if (currentAllies.Count > 1)
             {
-                var breakAllianceScoringModel = new WarAndAiTweaks.AI.BreakAllianceScoringModel();
+                var breakAllianceScoringModel = new BreakAllianceScoringModel();
                 Kingdom? weakestAlly = null;
                 float highestBreakScore = float.MinValue;
 
@@ -113,8 +115,8 @@ namespace WarAndAiTweaks.AI
 
         private void ExecuteStrengthening()
         {
-            var allianceScoringModel = new WarAndAiTweaks.AI.AllianceScoringModel();
-            var napScoringModel = new WarAndAiTweaks.AI.NonAggressionPactScoringModel();
+            var allianceScoringModel = new AllianceScoringModel();
+            var napScoringModel = new NonAggressionPactScoringModel();
 
             var bestAllianceCandidate = Kingdom.All
                 .Where(k => k != _owner && !_owner.IsAtWarWith(k) && !FactionManager.IsAlliedWithFaction(_owner, k))
@@ -132,7 +134,7 @@ namespace WarAndAiTweaks.AI
 
                     InformationManager.ShowInquiry(new InquiryData(inquiryTitle.ToString(), inquiryText.ToString(), true, true, new TextObject("{=3fTqLwkC}Accept").ToString(), new TextObject("{=dRoMejb0}Decline").ToString(),
                         () => {
-                            DiplomaticAction.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
+                            DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
                             AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
                         },
                         () => {
@@ -141,7 +143,7 @@ namespace WarAndAiTweaks.AI
                 }
                 else
                 {
-                    DiplomaticAction.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
+                    DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
                     AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
                 }
                 return;
@@ -163,7 +165,7 @@ namespace WarAndAiTweaks.AI
 
                     InformationManager.ShowInquiry(new InquiryData(inquiryTitle.ToString(), inquiryText.ToString(), true, true, new TextObject("{=3fTqLwkC}Accept").ToString(), new TextObject("{=dRoMejb0}Decline").ToString(),
                         () => {
-                            DiplomaticAction.FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
+                            FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
                             AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
                         },
                         () => {
@@ -172,7 +174,7 @@ namespace WarAndAiTweaks.AI
                 }
                 else
                 {
-                    DiplomaticAction.FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
+                    FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
                     AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
                 }
                 return;

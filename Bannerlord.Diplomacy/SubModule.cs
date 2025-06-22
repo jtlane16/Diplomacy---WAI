@@ -1,5 +1,7 @@
 ﻿using Bannerlord.UIExtenderEx;
 
+using CompanionHighlighter;
+
 using HarmonyLib;
 
 using TaleWorlds.CampaignSystem;
@@ -42,6 +44,16 @@ namespace WarAndAiTweaks
                 var campaignStarter = (CampaignGameStarter) gameStarter;
                 campaignStarter.AddBehavior(new StrategicAICampaignBehavior());
                 campaignStarter.AddBehavior(new DiplomaticAgreementManager());
+            }
+        }
+
+        public override void OnMissionBehaviorInitialize(Mission mission)
+        {
+            base.OnMissionBehaviorInitialize(mission);
+            if (mission.PlayerTeam != null)
+            {
+                mission.AddMissionBehavior(new CompanionMissionLogic());
+                mission.AddMissionBehavior(new CompanionMissionView());
             }
         }
     }

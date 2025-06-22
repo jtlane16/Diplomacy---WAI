@@ -123,7 +123,7 @@ namespace WarAndAiTweaks.AI
 
             if (bestAllianceCandidate != null && allianceScoringModel.ShouldTakeActionBidirectional(_owner, bestAllianceCandidate, 60f))
             {
-                Diplomacy.DiplomaticAction.Alliance.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
+                DiplomaticAction.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
                 AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
                 return; // Only do one diplomatic action per day.
             }
@@ -368,18 +368,8 @@ namespace WarAndAiTweaks.AI
                 var daysAtWar = stance.WarStartDate.ElapsedDaysUntilNow;
                 float warDurationFactor = Math.Min(daysAtWar / 180f, 1.0f);
                 explainedNumber.Add(warDurationFactor * 100f * (WarDurationWeight / 100f), new TextObject("{=XIPMI3gR}War Duration"));
-
-                // War Exhaustion (if enabled)
-                if (Settings.Instance!.EnableWarExhaustion && WarExhaustionManager.Instance is { } wem)
-                {
-                    float exhaustion = wem.GetWarExhaustion(k, enemy);
-                    explainedNumber.Add(exhaustion * (WarExhaustionWeight / 100f), new TextObject("{=V542tneW}War Exhaustion"));
-                }
-                else // Fallback to casualties if exhaustion is disabled
-                {
-                    float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
-                    explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("Casualties"));
-                }
+                float casualtiesRatio = k.GetCasualties() / (k.TotalStrength + 1f);
+                explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("Casualties"));
 
                 int fiefsLost = stance.GetSuccessfulSieges(enemy);
                 explainedNumber.Add(fiefsLost * 5f * (FiefLossWeight / 100f), new TextObject("{=DrNBDhx3}Fiefs Lost"));

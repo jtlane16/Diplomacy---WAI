@@ -6,10 +6,7 @@ using System.Text;
 
 using Diplomacy.DiplomaticAction;
 using Diplomacy.Extensions;
-
 using TaleWorlds.CampaignSystem;
-using TaleWorlds.Library;
-
 using WarAndAiTweaks.AI.Goals;
 
 namespace WarAndAiTweaks.AI

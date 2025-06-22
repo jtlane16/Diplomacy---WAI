@@ -156,32 +156,6 @@ namespace WarAndAiTweaks.AI.Behaviors
 
                 _peaceDays[kingdomId] = ai.DaysSinceLastWar;
                 _warDays[kingdomId] = ai.DaysAtWar;
-
-                var currentAllies = Kingdom.All.Where(k => k != kingdom && FactionManager.IsAlliedWithFaction(kingdom, k)).ToList();
-                if (currentAllies.Count > 1)
-                {
-                    var breakAllianceScoringModel = new WarAndAiTweaks.AI.BreakAllianceScoringModel();
-                    Kingdom? weakestAlly = null;
-                    float highestBreakScore = float.MinValue;
-
-                    foreach (var ally in currentAllies)
-                    {
-                        var breakScore = breakAllianceScoringModel.GetBreakAllianceScore(kingdom, ally).ResultNumber;
-                        if (breakScore > highestBreakScore)
-                        {
-                            highestBreakScore = breakScore;
-                            weakestAlly = ally;
-                        }
-                    }
-
-                    // If a weakest ally was found and conditions allow, break the alliance.
-                    if (weakestAlly != null)
-                    {
-                        BreakAllianceAction.Apply(kingdom, weakestAlly, "the alliance was no longer beneficial");
-                        AIComputationLogger.LogBetrayalDecision(kingdom, weakestAlly, highestBreakScore, "the alliance was no longer beneficial");
-                        continue;
-                    }
-                }
             }
         }
 

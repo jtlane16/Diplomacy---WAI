@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+
 using Diplomacy.Extensions;
+
 using TaleWorlds.CampaignSystem;
+
 using WarAndAiTweaks.AI.Goals;
 using WarAndAiTweaks.DiplomaticAction;
 
@@ -117,9 +120,9 @@ namespace WarAndAiTweaks.AI
             WriteLine($"{DateTime.UtcNow:o},AI_STATE_AND_GOAL,{kingdom.StringId},{state},{goal.Type},{goal.Priority:F2}{goalDetails}");
         }
 
-        public static void LogBetrayalDecision(Kingdom owner, Kingdom target, float score)
+        public static void LogBetrayalDecision(Kingdom owner, Kingdom target, float score, string reason)
         {
-            WriteLine($"{DateTime.UtcNow:o},BETRAYAL_DECISION,{owner.StringId},{target.StringId},{score:F2}");
+            WriteLine($"{DateTime.UtcNow:o},BETRAYAL_DECISION,{owner.StringId},{target.StringId},{score:F2},\"{reason}\"");
         }
 
         /// <summary>
@@ -163,9 +166,9 @@ namespace WarAndAiTweaks.AI
             var details = FormatExplainedNumber(allianceScore);
             WriteLine($"{DateTime.UtcNow:o},ALLIANCE_CANDIDATE,{owner.StringId},{target.StringId},{allianceScore.ResultNumber:F2},\"{details}\"");
         }
-        public static void LogAllianceDecision(Kingdom owner, Kingdom target, bool decided, float allianceScore)
+        public static void LogAllianceDecision(Kingdom owner, Kingdom target, bool decided, float allianceScore, string reason)
         {
-            WriteLine($"{DateTime.UtcNow:o},ALLIANCE_DECISION,{owner.StringId},{target.StringId},{(decided ? 1 : 0)},{allianceScore:F2}");
+            WriteLine($"{DateTime.UtcNow:o},ALLIANCE_DECISION,{owner.StringId},{target.StringId},{(decided ? 1 : 0)},{allianceScore:F2},\"{reason}\"");
         }
 
         // --- Non-Aggression Pact logging ---
@@ -175,9 +178,9 @@ namespace WarAndAiTweaks.AI
             WriteLine($"{DateTime.UtcNow:o},NAP_CANDIDATE,{owner.StringId},{target.StringId},{pactScore.ResultNumber:F2},\"{details}\"");
         }
 
-        public static void LogPactDecision(Kingdom owner, Kingdom target, bool decided, float pactScore)
+        public static void LogPactDecision(Kingdom owner, Kingdom target, bool decided, float pactScore, string reason)
         {
-            WriteLine($"{DateTime.UtcNow:o},NAP_DECISION,{owner.StringId},{target.StringId},{(decided ? 1 : 0)},{pactScore:F2}");
+            WriteLine($"{DateTime.UtcNow:o},NAP_DECISION,{owner.StringId},{target.StringId},{(decided ? 1 : 0)},{pactScore:F2},\"{reason}\"");
         }
     }
 }

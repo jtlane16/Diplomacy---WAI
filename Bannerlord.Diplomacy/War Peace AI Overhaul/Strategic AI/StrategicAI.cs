@@ -7,6 +7,7 @@ using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
@@ -72,22 +73,28 @@ namespace WarAndAiTweaks.AI
                 var breakAllianceScoringModel = new BreakAllianceScoringModel();
                 Kingdom? weakestAlly = null;
                 float highestBreakScore = float.MinValue;
+                ExplainedNumber breakScoreExplained = new ExplainedNumber();
 
                 foreach (var ally in currentAllies)
                 {
-                    var breakScore = breakAllianceScoringModel.GetBreakAllianceScore(_owner, ally).ResultNumber;
-                    if (breakScore > highestBreakScore)
+                    var currentBreakScore = breakAllianceScoringModel.GetBreakAllianceScore(_owner, ally);
+                    if (currentBreakScore.ResultNumber > highestBreakScore)
                     {
-                        highestBreakScore = breakScore;
+                        highestBreakScore = currentBreakScore.ResultNumber;
                         weakestAlly = ally;
+                        breakScoreExplained = currentBreakScore;
                     }
                 }
 
                 if (weakestAlly != null)
                 {
-                    BreakAllianceAction.Apply(_owner, weakestAlly);
-                    AIComputationLogger.LogBetrayalDecision(_owner, weakestAlly, highestBreakScore);
-                    return;
+                    if (breakAllianceScoringModel.ShouldBreakAlliance(_owner, weakestAlly))
+                    {
+                        string reason = GetPrimaryReason(breakScoreExplained);
+                        BreakAllianceAction.Apply(_owner, weakestAlly, reason);
+                        AIComputationLogger.LogBetrayalDecision(_owner, weakestAlly, highestBreakScore, reason);
+                        return;
+                    }
                 }
             }
 
@@ -104,8 +111,10 @@ namespace WarAndAiTweaks.AI
 
                     if (bestAllyToBetray != null && betrayalScoringModel.ShouldBreakAlliance(_owner, bestAllyToBetray))
                     {
-                        BreakAllianceAction.Apply(_owner, bestAllyToBetray);
-                        AIComputationLogger.LogBetrayalDecision(_owner, bestAllyToBetray, betrayalScoringModel.GetBreakAllianceScore(_owner, bestAllyToBetray).ResultNumber);
+                        var breakScore = betrayalScoringModel.GetBreakAllianceScore(_owner, bestAllyToBetray);
+                        string reason = GetPrimaryReason(breakScore);
+                        BreakAllianceAction.Apply(_owner, bestAllyToBetray, reason);
+                        AIComputationLogger.LogBetrayalDecision(_owner, bestAllyToBetray, breakScore.ResultNumber, reason);
                     }
                 }
             }
@@ -121,11 +130,17 @@ namespace WarAndAiTweaks.AI
                 .OrderByDescending(k => allianceScoringModel.GetAllianceScore(_owner, k).ResultNumber)
                 .FirstOrDefault();
 
-            if (bestAllianceCandidate != null && allianceScoringModel.ShouldTakeActionBidirectional(_owner, bestAllianceCandidate, 60f))
+            if (bestAllianceCandidate != null)
             {
-                DiplomaticAction.DeclareAllianceAction.Apply(_owner, bestAllianceCandidate);
-                AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate).ResultNumber);
-                return; // Only do one diplomatic action per day.
+                var allianceScore = allianceScoringModel.GetAllianceScore(_owner, bestAllianceCandidate);
+                if (allianceScoringModel.ShouldTakeActionBidirectional(_owner, bestAllianceCandidate, 60f))
+                {
+                    string reason = GetPrimaryReason(allianceScore);
+                    DeclareAllianceAction.Apply(_owner, bestAllianceCandidate, reason);
+                    AIComputationLogger.LogAllianceDecision(_owner, bestAllianceCandidate, true, allianceScore.ResultNumber, reason);
+                    return; // Only do one diplomatic action per day.
+                }
+
             }
 
             var bestNapCandidate = Kingdom.All
@@ -133,30 +148,39 @@ namespace WarAndAiTweaks.AI
                 .OrderByDescending(k => napScoringModel.GetPactScore(_owner, k).ResultNumber)
                 .FirstOrDefault();
 
-            if (bestNapCandidate != null && napScoringModel.ShouldTakeActionBidirectional(_owner, bestNapCandidate, 50f))
+            if (bestNapCandidate != null)
             {
-                if (bestNapCandidate.Leader == Hero.MainHero)
+                var napScore = napScoringModel.GetPactScore(_owner, bestNapCandidate);
+                if (napScoringModel.ShouldTakeActionBidirectional(_owner, bestNapCandidate, 50f))
                 {
-                    var inquiryTitle = new TextObject("{=yj4XFa5T}Non-Aggression Pact Proposal");
-                    var inquiryText = new TextObject("{=gyLjlpJB}{KINGDOM} is proposing a non-aggression pact with {PLAYER_KINGDOM}.")
-                        .SetTextVariable("KINGDOM", _owner.Name)
-                        .SetTextVariable("PLAYER_KINGDOM", bestNapCandidate.Name);
+                    string reason = GetPrimaryReason(napScore);
+                    if (bestNapCandidate.Leader == Hero.MainHero)
+                    {
+                        var inquiryTitle = new TextObject("{=yj4XFa5T}Non-Aggression Pact Proposal");
+                        var inquiryText = new TextObject("{=gyLjlpJB}{KINGDOM} is proposing a non-aggression pact with {PLAYER_KINGDOM} because {REASON}.")
+                            .SetTextVariable("KINGDOM", _owner.Name)
+                            .SetTextVariable("PLAYER_KINGDOM", bestNapCandidate.Name)
+                            .SetTextVariable("REASON", reason);
 
-                    InformationManager.ShowInquiry(new InquiryData(inquiryTitle.ToString(), inquiryText.ToString(), true, true, new TextObject("{=3fTqLwkC}Accept").ToString(), new TextObject("{=dRoMejb0}Decline").ToString(),
-                        () => {
-                            FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
-                            AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
-                        },
-                        () => {
-                            AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, false, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
-                        }));
+
+                        InformationManager.ShowInquiry(new InquiryData(inquiryTitle.ToString(), inquiryText.ToString(), true, true, new TextObject("{=3fTqLwkC}Accept").ToString(), new TextObject("{=dRoMejb0}Decline").ToString(),
+                            () =>
+                            {
+                                FormNonAggressionPactAction.Apply(_owner, bestNapCandidate, reason);
+                                AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScore.ResultNumber, reason);
+                            },
+                            () =>
+                            {
+                                AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, false, napScore.ResultNumber, reason);
+                            }));
+                    }
+                    else
+                    {
+                        FormNonAggressionPactAction.Apply(_owner, bestNapCandidate, reason);
+                        AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScore.ResultNumber, reason);
+                    }
+                    return;
                 }
-                else
-                {
-                    FormNonAggressionPactAction.Apply(_owner, bestNapCandidate);
-                    AIComputationLogger.LogPactDecision(_owner, bestNapCandidate, true, napScoringModel.GetPactScore(_owner, bestNapCandidate).ResultNumber);
-                }
-                return;
             }
         }
 
@@ -252,6 +276,27 @@ namespace WarAndAiTweaks.AI
             DaysSinceLastWar = atWar ? 0 : DaysSinceLastWar + 1;
         }
 
+        private string GetPrimaryReason(ExplainedNumber explainedNumber)
+        {
+            var lines = explainedNumber.GetLines();
+            if (lines == null || !lines.Any())
+            {
+                return "of unforeseen circumstances";
+            }
+
+            var primaryReasonLine = lines
+                .OrderByDescending(line => Math.Abs(line.number))
+                .FirstOrDefault();
+
+            if (primaryReasonLine == default)
+            {
+                return "of a complex set of factors";
+            }
+
+            return $"its {primaryReasonLine.name.ToLower()}";
+        }
+
+
         // --- Nested Evaluator Classes and Interfaces ---
 
         public interface IWarEvaluator { ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar, Dictionary<string, CampaignTime> lastPeaceTimes); }
@@ -259,7 +304,7 @@ namespace WarAndAiTweaks.AI
 
         public class DefaultWarEvaluator : IWarEvaluator
         {
-            private const float DistanceWeight = 30f;
+            private const float DistanceWeight = 75f;
             private const float MaxDistance = 1500f;
             private const float SnowballRatioThreshold = 1.5f;
             private const float SnowballBonus = 30f;
@@ -268,7 +313,7 @@ namespace WarAndAiTweaks.AI
             private const float EconomyWeight = 20f;
             private const float WarWeaknessWeight = 20f;
             private const float SharedBorderBonus = 30f;
-            private const float NoSharedBorderPenalty = -50f;
+            private const float NoSharedBorderPenalty = -100f;
             private const float RECENT_PEACE_PENALTY_MAX = -200f;
 
             public ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar, Dictionary<string, CampaignTime> lastPeaceTimes)
@@ -280,6 +325,17 @@ namespace WarAndAiTweaks.AI
                 if (warDesire > 0)
                 {
                     explainedNumber.Add(warDesire, new TextObject("War Desire (from peace time)"));
+                }
+
+                var peaceKey = (string.Compare(a.StringId, b.StringId) < 0) ? $"{a.StringId}_{b.StringId}" : $"{b.StringId}_{a.StringId}";
+                if (lastPeaceTimes.TryGetValue(peaceKey, out var peaceTime))
+                {
+                    var daysSincePeace = CampaignTime.Now.ToDays - peaceTime.ToDays;
+                    if (daysSincePeace < 100) // Penalty active for 100 days
+                    {
+                        var penalty = RECENT_PEACE_PENALTY_MAX * (float) (1 - (daysSincePeace / 100f));
+                        explainedNumber.Add(penalty, new TextObject("Recently made peace"));
+                    }
                 }
 
                 float strengthA = a.TotalStrength;

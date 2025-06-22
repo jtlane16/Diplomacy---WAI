@@ -2,7 +2,10 @@
 using System.Linq;
 using WarAndAiTweaks.DiplomaticAction;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
 using TaleWorlds.SaveSystem;
+
 
 namespace WarAndAiTweaks
 {
@@ -75,11 +78,12 @@ namespace WarAndAiTweaks
             return Instance._nonAggressionPacts.Where(p => p.Faction1 == kingdom || p.Faction2 == kingdom);
         }
 
-        public static void FormNonAggressionPact(Kingdom kingdom1, Kingdom kingdom2)
+        public static void FormNonAggressionPact(Kingdom kingdom1, Kingdom kingdom2, string reason)
         {
             if (!HasNonAggressionPact(kingdom1, kingdom2, out _))
             {
                 Instance._nonAggressionPacts.Add(new NonAggressionPact(kingdom1, kingdom2));
+                InformationManager.DisplayMessage(new InformationMessage($"{kingdom1.Name} and {kingdom2.Name} have signed a non-aggression pact because {reason}.", Colors.Green));
             }
         }
 
@@ -88,11 +92,12 @@ namespace WarAndAiTweaks
             Instance._nonAggressionPacts.RemoveAll(p => (p.Faction1 == kingdom1 && p.Faction2 == kingdom2) || (p.Faction1 == kingdom2 && p.Faction2 == kingdom1));
         }
 
-        public static void DeclareAlliance(Kingdom kingdom1, Kingdom kingdom2)
+        public static void DeclareAlliance(Kingdom kingdom1, Kingdom kingdom2, string reason)
         {
             if (Instance._alliances.All(a => (a.Faction1 != kingdom1 || a.Faction2 != kingdom2) && (a.Faction1 != kingdom2 || a.Faction2 != kingdom1)))
             {
                 Instance._alliances.Add(new Alliance(kingdom1, kingdom2));
+                InformationManager.DisplayMessage(new InformationMessage($"{kingdom1.Name} and {kingdom2.Name} have formed an alliance because {reason}.", Colors.Green));
                 if (kingdom1.IsAtWarWith(kingdom2))
                 {
                     TaleWorlds.CampaignSystem.Actions.MakePeaceAction.Apply(kingdom1, kingdom2);
@@ -100,9 +105,10 @@ namespace WarAndAiTweaks
             }
         }
 
-        public static void BreakAlliance(Kingdom kingdom1, Kingdom kingdom2)
+        public static void BreakAlliance(Kingdom kingdom1, Kingdom kingdom2, string reason)
         {
             Instance._alliances.RemoveAll(a => (a.Faction1 == kingdom1 && a.Faction2 == kingdom2) || (a.Faction1 == kingdom2 && a.Faction2 == kingdom1));
+            InformationManager.DisplayMessage(new InformationMessage($"{kingdom1.Name} has broken their alliance with {kingdom2.Name} because {reason}.", Colors.Red));
         }
     }
 }

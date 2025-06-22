@@ -1,14 +1,11 @@
-﻿using HarmonyLib;
+﻿using Diplomacy.Extensions;
 
-using Helpers;
-
-using LT_Nemesis;
-
+using HarmonyLib;
+using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
-using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Settlements.Buildings;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
 using TaleWorlds.Library;
@@ -26,21 +23,21 @@ namespace Diplomacy.War_Peace_AI_Overhaul
         public class Patch_DisableRandomPeace { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
 
         [HarmonyPatch(typeof(Building), "GetBuildingEffectAmount")]
-	    public class MilitiaPatch
-	    {
-		    // Token: 0x06000001 RID: 1 RVA: 0x00002048 File Offset: 0x00000248
-		    static void Postfix(Building __instance, BuildingEffectEnum effect, ref float __result)
-		    {
-			    //If disabled, skip logic
+        public class MilitiaPatch
+        {
+            // Token: 0x06000001 RID: 1 RVA: 0x00002048 File Offset: 0x00000248
+            static void Postfix(Building __instance, BuildingEffectEnum effect, ref float __result)
+            {
+                //If disabled, skip logic
 
-			    if (effect == BuildingEffectEnum.Militia && __instance.Name.ToString() == "Militia Grounds")
-			    {
-				    if (__instance.Town.IsCastle) { __result = __result + 5; }
-				    if (__instance.Town.IsTown) { __result = __result + 10; }
-			    }
-			    return;
-		    }
-	    }
+                if (effect == BuildingEffectEnum.Militia && __instance.Name.ToString() == "Militia Grounds")
+                {
+                    if (__instance.Town.IsCastle) { __result = __result + 5; }
+                    if (__instance.Town.IsTown) { __result = __result + 10; }
+                }
+                return;
+            }
+        }
         [HarmonyPatch(typeof(KingdomDiplomacyVM), "OnDeclarePeace")]
         public class KingdomPlayerPeacePatch
         {
@@ -77,6 +74,58 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                 // We need a way to access the StrategicAICampaignBehavior instance.
                 var strategicAIBehavior = Campaign.Current.GetCampaignBehavior<StrategicAICampaignBehavior>();
                 strategicAIBehavior?.OnPeaceDeclared(faction1, faction2, detail);
+
+                // If peace is made between two kingdoms, ensure all their allies also make peace.
+                if (faction1 is Kingdom kingdom1 && faction2 is Kingdom kingdom2)
+                {
+                    // Get all allies of the first kingdom
+                    var alliesOf1 = kingdom1.GetAlliedKingdoms().ToList();
+                    // Get all allies of the second kingdom
+                    var alliesOf2 = kingdom2.GetAlliedKingdoms().ToList();
+
+                    // Allies of kingdom1 make peace with kingdom2 and all of kingdom2's allies.
+                    foreach (var ally1 in alliesOf1)
+                    {
+                        if (ally1.IsAtWarWith(kingdom2))
+                        {
+                            MakePeaceAction.Apply(ally1, kingdom2);
+                        }
+                        foreach (var ally2 in alliesOf2)
+                        {
+                            if (ally1.IsAtWarWith(ally2))
+                            {
+                                MakePeaceAction.Apply(ally1, ally2);
+                            }
+                        }
+                    }
+
+                    // Allies of kingdom2 make peace with kingdom1.
+                    foreach (var ally2 in alliesOf2)
+                    {
+                        if (ally2.IsAtWarWith(kingdom1))
+                        {
+                            MakePeaceAction.Apply(ally2, kingdom1);
+                        }
+                    }
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(DeclareWarAction), "ApplyByDefault")]
+        public class DeclareWarAction_ApplyByDefault_Patch
+        {
+            /// <summary>
+            /// This patch stops allies from being called into offensive wars.
+            /// It only establishes war between the two primary factions.
+            /// The defensive call-to-arms is handled in StrategicAICampaignBehavior.
+            /// </summary>
+            public static bool Prefix(IFaction faction1, IFaction faction2)
+            {
+                // Establish war only between the aggressor (faction1) and the defender (faction2)
+                DeclareWarAction.ApplyByDefault(faction1, faction2);
+
+                // Return false to skip the original method, which would have called all allies.
+                return false;
             }
         }
     }

@@ -104,7 +104,7 @@ namespace WarAndAiTweaks.AI.Behaviors
                 var allies = kingdom.GetAlliedKingdoms().ToList();
                 var pacts = DiplomaticAgreementManager.GetPacts(kingdom).ToList();
                 var bordering = kingdom.GetBorderingKingdoms().ToList();
-                AIComputationLogger.LogDiplomaticOverview(kingdom, strategicState, enemies, allies, pacts, bordering);
+                AIComputationLogger.LogDiplomaticOverview(kingdom, strategicState, enemies, allies, pacts.Cast<Diplomacy.DiplomaticAction.DiplomaticAgreement>(), bordering);
 
                 var currentGoal = GoalEvaluator.GetHighestPriorityGoal(kingdom, _peaceDays[kingdomId], _warDays[kingdomId], strategicState, _lastPeaceTimes);
                 AIComputationLogger.LogAIGoal(kingdom, currentGoal, strategicState);

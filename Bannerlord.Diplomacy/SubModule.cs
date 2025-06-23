@@ -9,6 +9,8 @@ using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
 
+using TodayWeFeast;
+
 using WarAndAiTweaks.AI.Behaviors;
 using WarAndAiTweaks.DiplomaticAction;
 
@@ -47,6 +49,7 @@ namespace WarAndAiTweaks
                 campaignStarter.AddBehavior(new DiplomaticAgreementManager());
                 campaignStarter.AddBehavior(new InfamyManager()); // Add this line
                 campaignStarter.AddBehavior(new ClanDefenseCampaignBehavior());
+                campaignStarter.AddBehavior(FeastBehavior.Instance);
 
             }
         }

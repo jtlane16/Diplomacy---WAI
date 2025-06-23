@@ -15,6 +15,8 @@ namespace Diplomacy.Extensions
         {
             if (kingdom == otherKingdom)
                 return 100f;
+            if (kingdom.RulingClan == null || otherKingdom.RulingClan == null)
+                return 0f; // Return a neutral relationship if a clan is destroyed
             return kingdom.RulingClan.GetRelationWithClan(otherKingdom.RulingClan);
         }
 

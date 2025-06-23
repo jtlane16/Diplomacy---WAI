@@ -325,7 +325,7 @@ namespace WarAndAiTweaks.AI
             private const float TerritoryWeight = 25f;
             private const float AllianceTerritoryWeight = 15f;
             private const float SharedBorderBonus = 30f;
-            private const float NoSharedBorderPenalty = -100f;
+            private const float NoSharedBorderPenalty = -300f;
             private const float RECENT_PEACE_PENALTY_MAX = -200f;
             private const float INFAMY_PENALTY_MAX = -100f;
 
@@ -390,7 +390,8 @@ namespace WarAndAiTweaks.AI
                 int borders = a.Settlements.Count(s => s.IsBorderSettlementWith(b));
                 if (borders > 0)
                 {
-                    explainedNumber.Add(SharedBorderBonus, new TextObject("Shared Border"));
+                    // Give a stronger bonus if there are multiple contested borders.
+                    explainedNumber.Add(SharedBorderBonus + (borders * 5f), new TextObject("Shared Border"));
                 }
                 else
                 {
@@ -489,6 +490,15 @@ namespace WarAndAiTweaks.AI
                 var explainedNumber = new ExplainedNumber(0f, true);
                 var stance = k.GetStanceWith(enemy);
                 if (stance == null || !stance.IsAtWar) return explainedNumber;
+
+                // Multi-Front War Pressure: Add a significant bonus for each active war.
+                int warCount = FactionManager.GetEnemyKingdoms(k).Count();
+                if (warCount > 1)
+                {
+                    // The more wars they are in, the more they want peace.
+                    // The bonus starts at the 2nd war.
+                    explainedNumber.Add((warCount - 1) * 35f, new TextObject("Pressure from fighting a multi-front war"));
+                }
 
                 var daysAtWar = stance.WarStartDate.ElapsedDaysUntilNow;
                 float warDurationFactor = Math.Min(daysAtWar / 40f, 1.0f);

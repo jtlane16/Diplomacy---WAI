@@ -10,9 +10,12 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Settlements.Buildings;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
 using TaleWorlds.Library;
+using TaleWorlds.Localization;
 
 using WarAndAiTweaks.AI;
 using WarAndAiTweaks.AI.Behaviors;
@@ -132,6 +135,28 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                 }
 
                 return false;
+            }
+        }
+        [HarmonyPatch(typeof(DefaultPartySizeLimitModel), "CalculateBaseMemberSize")]
+        public class DefaultPartySizeLimitModelPatch
+        {
+            public static void Postfix(Hero partyLeader, IFaction partyMapFaction, Clan actualClan, ref ExplainedNumber result)
+            {
+                if (partyLeader == null || partyMapFaction == null || actualClan == null)
+                {
+                    return;
+                }
+                foreach (Settlement settlement in actualClan.Settlements.Where(x => x.IsCastle || x.IsTown))
+                {
+                    if (settlement.IsTown)
+                    {
+                        result.Add(10f, new TextObject("Bonus from town " + settlement.Name.ToString()));
+                    }
+                    else if (settlement.IsCastle)
+                    {
+                        result.Add(5f, new TextObject("Bonus from castle " + settlement.Name.ToString()));
+                    }
+                }
             }
         }
     }

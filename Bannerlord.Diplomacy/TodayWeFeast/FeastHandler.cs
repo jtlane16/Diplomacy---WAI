@@ -116,7 +116,6 @@ namespace TodayWeFeast
                         }
                     }
                 }
-                // --- END NEW LOGIC ---
             }
 
             foreach (var kingdom in Kingdom.All.Where(k => !k.IsEliminated))

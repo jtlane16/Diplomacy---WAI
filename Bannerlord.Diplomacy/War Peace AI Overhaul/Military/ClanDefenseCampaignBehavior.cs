@@ -182,6 +182,12 @@ namespace WarAndAiTweaks.AI.Behaviors
 
             foreach (var siegeEvent in Campaign.Current.SiegeEventManager.SiegeEvents)
             {
+                // ADDED: Prevent the besieging army from trying to support its own siege.
+                if (siegeEvent.BesiegerCamp.LeaderParty == mobileParty)
+                {
+                    continue;
+                }
+
                 if (siegeEvent.BesiegerCamp.LeaderParty.MapFaction == mobileParty.MapFaction)
                 {
                     Settlement besiegedSettlement = siegeEvent.BesiegedSettlement;
@@ -192,7 +198,7 @@ namespace WarAndAiTweaks.AI.Behaviors
                         continue;
                     }
 
-                    float score = 80f; // Base score for supporting a friendly siege.
+                    float score = 80f;
 
                     if (besiegedSettlement.IsTown)
                     {

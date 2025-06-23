@@ -1,7 +1,11 @@
 ﻿using Diplomacy.Extensions;
 
 using HarmonyLib;
+
+using System;
 using System.Linq;
+using System.Reflection;
+
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
@@ -10,6 +14,7 @@ using TaleWorlds.CampaignSystem.Settlements.Buildings;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
 using TaleWorlds.Library;
 
+using WarAndAiTweaks.AI;
 using WarAndAiTweaks.AI.Behaviors;
 
 namespace Diplomacy.War_Peace_AI_Overhaul
@@ -25,11 +30,8 @@ namespace Diplomacy.War_Peace_AI_Overhaul
         [HarmonyPatch(typeof(Building), "GetBuildingEffectAmount")]
         public class MilitiaPatch
         {
-            // Token: 0x06000001 RID: 1 RVA: 0x00002048 File Offset: 0x00000248
             static void Postfix(Building __instance, BuildingEffectEnum effect, ref float __result)
             {
-                //If disabled, skip logic
-
                 if (effect == BuildingEffectEnum.Militia && __instance.Name.ToString() == "Militia Grounds")
                 {
                     if (__instance.Town.IsCastle) { __result = __result + 5; }
@@ -41,13 +43,11 @@ namespace Diplomacy.War_Peace_AI_Overhaul
         [HarmonyPatch(typeof(KingdomDiplomacyVM), "OnDeclarePeace")]
         public class KingdomPlayerPeacePatch
         {
-            // We need to get an instance of the behavior to call its public method
             private static bool WantsPeace(Kingdom us, Kingdom them)
             {
-                // This is a simplified version of the logic in StrategicAIBehavior for the player's perspective.
-                // You might want to expose the main behavior's method publicly if more complexity is needed.
-                var warProgress = (us.GetStanceWith(them)?.GetSuccessfulSieges(us) ?? 0) - (us.GetStanceWith(them)?.GetSuccessfulSieges(them) ?? 0);
-                return (warProgress * 10) > 60f; // Simplified threshold
+                var peaceEvaluator = new StrategicAI.DefaultPeaceEvaluator();
+                var peaceScore = peaceEvaluator.GetPeaceScore(us, them).ResultNumber;
+                return peaceScore > 30f;
             }
 
             public static bool Prefix(KingdomWarItemVM item)
@@ -56,7 +56,6 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                 var targetKingdom = item.Faction2 as Kingdom;
                 if (playerKingdom == null || targetKingdom == null) return true;
 
-                // We check if the AI kingdom wants peace with the player kingdom.
                 if (WantsPeace(targetKingdom, playerKingdom))
                 {
                     return true;
@@ -71,19 +70,14 @@ namespace Diplomacy.War_Peace_AI_Overhaul
         {
             public static void Postfix(IFaction faction1, IFaction faction2, MakePeaceAction.MakePeaceDetail detail)
             {
-                // We need a way to access the StrategicAICampaignBehavior instance.
                 var strategicAIBehavior = Campaign.Current.GetCampaignBehavior<StrategicAICampaignBehavior>();
                 strategicAIBehavior?.OnPeaceDeclared(faction1, faction2, detail);
 
-                // If peace is made between two kingdoms, ensure all their allies also make peace.
                 if (faction1 is Kingdom kingdom1 && faction2 is Kingdom kingdom2)
                 {
-                    // Get all allies of the first kingdom
                     var alliesOf1 = kingdom1.GetAlliedKingdoms().ToList();
-                    // Get all allies of the second kingdom
                     var alliesOf2 = kingdom2.GetAlliedKingdoms().ToList();
 
-                    // Allies of kingdom1 make peace with kingdom2 and all of kingdom2's allies.
                     foreach (var ally1 in alliesOf1)
                     {
                         if (ally1.IsAtWarWith(kingdom2))
@@ -99,7 +93,6 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                         }
                     }
 
-                    // Allies of kingdom2 make peace with kingdom1.
                     foreach (var ally2 in alliesOf2)
                     {
                         if (ally2.IsAtWarWith(kingdom1))
@@ -114,17 +107,30 @@ namespace Diplomacy.War_Peace_AI_Overhaul
         [HarmonyPatch(typeof(DeclareWarAction), "ApplyByDefault")]
         public class DeclareWarAction_ApplyByDefault_Patch
         {
-            /// <summary>
-            /// This patch stops allies from being called into offensive wars.
-            /// It only establishes war between the two primary factions.
-            /// The defensive call-to-arms is handled in StrategicAICampaignBehavior.
-            /// </summary>
+            private static MethodInfo _applyInternalMethod;
+
+            public static bool Prepare()
+            {
+                _applyInternalMethod = AccessTools.Method(typeof(DeclareWarAction), "ApplyInternal");
+                return _applyInternalMethod != null;
+            }
+
             public static bool Prefix(IFaction faction1, IFaction faction2)
             {
-                // Establish war only between the aggressor (faction1) and the defender (faction2)
-                DeclareWarAction.ApplyByDefault(faction1, faction2);
+                try
+                {
+                    var detail = (faction1 == Hero.MainHero.MapFaction || faction2 == Hero.MainHero.MapFaction)
+                        ? DeclareWarAction.DeclareWarDetail.CausedByPlayerHostility
+                        : DeclareWarAction.DeclareWarDetail.CausedByKingdomDecision;
 
-                // Return false to skip the original method, which would have called all allies.
+                    _applyInternalMethod.Invoke(null, new object[] { faction1, faction2, detail });
+                }
+                catch (Exception ex)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage($"War & AI Tweaks Harmony Error: Could not call ApplyInternal. {ex.Message}", Colors.Red));
+                    return true;
+                }
+
                 return false;
             }
         }

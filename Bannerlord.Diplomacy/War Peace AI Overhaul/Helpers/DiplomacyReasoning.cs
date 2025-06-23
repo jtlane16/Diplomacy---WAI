@@ -64,7 +64,7 @@ namespace WarAndAiTweaks.AI
         /// "{KINGDOM} makes peace with {TARGET} because {REASON}."
         /// </summary>
         public static string PeaceNotification(Kingdom k, Kingdom enemy,
-                                       DefaultPeaceEvaluator eval)
+                                               DefaultPeaceEvaluator eval)
         {
             int fronts = FactionManager.GetEnemyKingdoms(k).Count();
 
@@ -75,6 +75,14 @@ namespace WarAndAiTweaks.AI
             if (fronts > 1)
                 sb.Append($" while fighting on {fronts} fronts");
 
+#if DIPOLOMACY_WAR_EXHAUSTION
+            if (Diplomacy.WarExhaustion.WarExhaustionManager.Instance is { } wem &&
+                wem.IsEnabled &&
+                wem.TryGetWarExhaustion(k, enemy, out var we) && we > 50f)
+            {
+                sb.Append(", war exhaustion is high");
+            }
+#endif
             return new TextObject("{=notif_peace}{KINGDOM} makes peace with {TARGET} because {REASON}.")
                    .SetTextVariable("KINGDOM", k.Name)
                    .SetTextVariable("TARGET", enemy.Name)
@@ -84,6 +92,6 @@ namespace WarAndAiTweaks.AI
 
         private static float GetStrength(Kingdom kingdom) =>
             kingdom.TotalStrength +
-            Kingdom.All.Where(k => FactionManager.IsAlliedWithFaction(k, kingdom)).Sum(k => k.TotalStrength);
+            kingdom.GetAlliedKingdoms().Sum(k => k.TotalStrength);
     }
 }

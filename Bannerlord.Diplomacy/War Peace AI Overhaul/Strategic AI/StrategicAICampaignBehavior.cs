@@ -98,7 +98,7 @@ namespace WarAndAiTweaks.AI.Behaviors
 
             foreach (var kingdom in kingdoms)
             {
-                if (kingdom.IsEliminated || kingdom.Leader == Hero.MainHero)
+                if (kingdom.IsEliminated || kingdom.Leader == null)
                 {
                     continue;
                 }

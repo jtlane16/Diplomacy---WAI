@@ -50,12 +50,10 @@ namespace WarAndAiTweaks.AI.Goals
             {
                 float strengthRatio = this.Kingdom.TotalStrength / totalEnemyStrength;
 
-                // If we are significantly weaker, boost the priority to seek peace.
-                if (strengthRatio < 0.7f) // i.e., less than 70% of the combined enemy strength
+                if (strengthRatio < 0.7f)
                 {
-                    // The weaker we are, the bigger the boost.
-                    float weaknessFactor = (0.7f - strengthRatio) / 0.7f; // A value from 0 to 1
-                    this.Priority += weaknessFactor * 25; // Add up to 25 extra points
+                    float weaknessFactor = (0.7f - strengthRatio) / 0.7f;
+                    this.Priority += weaknessFactor * 40; // Increased from 25
                 }
             }
 

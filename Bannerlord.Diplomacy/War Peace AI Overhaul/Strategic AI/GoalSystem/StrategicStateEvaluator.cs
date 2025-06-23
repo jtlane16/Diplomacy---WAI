@@ -14,6 +14,11 @@ namespace WarAndAiTweaks.AI.Goals
 
         public static StrategicState GetStrategicState(Kingdom kingdom)
         {
+            if (kingdom == null || kingdom.IsEliminated)
+            {
+                return StrategicState.Opportunistic; // Return a default state for invalid kingdoms
+            }
+
             var enemies = FactionManager.GetEnemyKingdoms(kingdom).ToList();
 
             // LOGIC REORDERED: War-based states are now evaluated first.

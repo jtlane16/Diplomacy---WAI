@@ -3,6 +3,8 @@
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.SaveSystem;
 
+using TodayWeFeast;
+
 using WarAndAiTweaks;
 using WarAndAiTweaks.AI.Behaviors;
 using WarAndAiTweaks.AI.Goals;
@@ -20,6 +22,8 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         AddClassDefinition(typeof(NonAggressionPact), 4);
         AddClassDefinition(typeof(DiplomaticAgreement), 5);
         AddClassDefinition(typeof(InfamyManager), 6); // Add this line
+        AddClassDefinition(typeof(FeastObject), 2137782638);
+        AddClassDefinition(typeof(FeastBehavior), 2137782639);
     }
 
     protected override void DefineContainerDefinitions()
@@ -30,6 +34,8 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         ConstructContainerDefinition(typeof(Dictionary<string, StrategicState>));
         ConstructContainerDefinition(typeof(Dictionary<string, CampaignTime>));
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, float>)); // Add this line
+        ConstructContainerDefinition(typeof(List<FeastObject>));
+        ConstructContainerDefinition(typeof(Dictionary<Kingdom, double>));
     }
 
     protected override void DefineEnumTypes()

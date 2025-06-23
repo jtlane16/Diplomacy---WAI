@@ -1,18 +1,22 @@
 ﻿using Diplomacy.Extensions;
-using WarAndAiTweaks.DiplomaticAction;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
-using WarAndAiTweaks.AI.Goals;
+using TodayWeFeast;
+
 using WarAndAiTweaks.AI;
+using WarAndAiTweaks.AI.Goals;
+using WarAndAiTweaks.DiplomaticAction;
 
 using TWMathF = TaleWorlds.Library.MathF;
 
@@ -344,6 +348,19 @@ namespace WarAndAiTweaks.AI
                 if (warDesire > 0)
                 {
                     explainedNumber.Add(warDesire, new TextObject("War Desire (from peace time)"));
+                }
+
+                if (FeastBehavior.Instance != null && FeastBehavior.Instance.feastIsPresent(b))
+                {
+                    // Apply a penalty if the target kingdom is hosting a feast
+                    float honorPenalty = a.Leader.GetTraitLevel(DefaultTraits.Honor) * 25f;
+                    explainedNumber.Add(-50f - honorPenalty, new TextObject("Attacking while they are feasting would be dishonorable"));
+                }
+
+                if (FeastBehavior.Instance != null && FeastBehavior.Instance.feastIsPresent(a))
+                {
+                    // Apply a penalty because declaring war would end their own feast
+                    explainedNumber.Add(-150f, new TextObject("We are hosting a feast and a war would disrupt the festivities"));
                 }
 
                 var peaceKey = (string.Compare(a.StringId, b.StringId) < 0) ? $"{a.StringId}_{b.StringId}" : $"{b.StringId}_{a.StringId}";

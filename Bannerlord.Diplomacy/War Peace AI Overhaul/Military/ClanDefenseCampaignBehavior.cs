@@ -8,10 +8,14 @@ using TaleWorlds.CampaignSystem.Siege;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 
+using TodayWeFeast;
+
 namespace WarAndAiTweaks.AI.Behaviors
 {
     public class ClanDefenseCampaignBehavior : CampaignBehaviorBase
     {
+        private FeastAttendingScoringModel _feastAttendingScoringModel = new FeastAttendingScoringModel();
+
         public override void RegisterEvents()
         {
             CampaignEvents.AiHourlyTickEvent.AddNonSerializedListener(this, OnAiHourlyTick);
@@ -29,6 +33,7 @@ namespace WarAndAiTweaks.AI.Behaviors
                 return;
             }
 
+
             if (mobileParty.Army != null && mobileParty.Army.LeaderParty != mobileParty)
             {
                 var escortBehavior = new AIBehaviorTuple(mobileParty.Army.LeaderParty, AiBehavior.EscortParty);
@@ -39,6 +44,9 @@ namespace WarAndAiTweaks.AI.Behaviors
             AIBehaviorTuple bestOption = new AIBehaviorTuple(null, AiBehavior.Hold);
             float maxScore = 0f;
 
+            EvaluateFeastActions(mobileParty, ref bestOption, ref maxScore); // <-- ADD THIS LINE
+            EvaluateDefensiveActions(mobileParty, ref bestOption, ref maxScore);
+
             EvaluateDefensiveActions(mobileParty, ref bestOption, ref maxScore);
             EvaluateOpportunisticActions(mobileParty, ref bestOption, ref maxScore);
             EvaluateRecruitmentActions(mobileParty, ref bestOption, ref maxScore);
@@ -48,6 +56,25 @@ namespace WarAndAiTweaks.AI.Behaviors
             if (bestOption.Party != null && maxScore > 0)
             {
                 thinkParams.AIBehaviorScores.Add((bestOption, maxScore));
+            }
+        }
+
+        private void EvaluateFeastActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
+        {
+            if (FeastBehavior.Instance?.Feasts == null) return;
+
+            foreach (var feast in FeastBehavior.Instance.Feasts)
+            {
+                // Check if this lord is invited to the feast
+                if (feast.lordsInFeast.Contains(mobileParty.LeaderHero))
+                {
+                    var score = _feastAttendingScoringModel.GetFeastAttendingScore(mobileParty.LeaderHero, feast);
+                    if (score.ResultNumber > maxScore)
+                    {
+                        maxScore = score.ResultNumber;
+                        bestOption = new AIBehaviorTuple(feast.feastSettlement, AiBehavior.GoToSettlement);
+                    }
+                }
             }
         }
 

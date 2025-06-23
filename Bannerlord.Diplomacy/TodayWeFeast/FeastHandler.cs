@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.GameMenus;
@@ -10,20 +11,23 @@ using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using TaleWorlds.Localization;
 using TaleWorlds.SaveSystem;
 
 namespace TodayWeFeast
 {
 	internal class FeastBehavior : CampaignBehaviorBase
 	{
-		// Token: 0x0600010C RID: 268 RVA: 0x0000669C File Offset: 0x0000489C
-		public override void RegisterEvents()
+        // Token: 0x0600010C RID: 268 RVA: 0x0000669C File Offset: 0x0000489C
+        private FeastHostingScoringModel _feastScoringModel = new FeastHostingScoringModel();
+
+        public override void RegisterEvents()
 		{
 			this.Feasts = new List<FeastObject>();
 			CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, new Action(this.OnDailyTick));
 			CampaignEvents.AfterSettlementEntered.AddNonSerializedListener(this, new Action<MobileParty, Settlement, Hero>(this.OnAfterSettlementEntered));
-			CampaignEvents.WarDeclared.AddNonSerializedListener(this, new Action<IFaction, IFaction>(this.OnWarDeclared));
-			CampaignEvents.OnGameEarlyLoadedEvent.AddNonSerializedListener(this, new Action<CampaignGameStarter>(this.OnGameLoaded));
+            CampaignEvents.WarDeclared.AddNonSerializedListener(this, OnWarDeclared); 
+            CampaignEvents.OnGameEarlyLoadedEvent.AddNonSerializedListener(this, new Action<CampaignGameStarter>(this.OnGameLoaded));
 			CampaignEvents.OnNewGameCreatedEvent.AddNonSerializedListener(this, new Action<CampaignGameStarter>(this.OnGameLoaded));
 			CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, new Action<CampaignGameStarter>(this.MenuItems));
 		}
@@ -60,9 +64,9 @@ namespace TodayWeFeast
 			}
 		}
 
-		private void OnWarDeclared(IFaction faction1, IFaction faction2)
-		{
-			foreach (FeastObject feast in Feasts.ToList())
+        private void OnWarDeclared(IFaction faction1, IFaction faction2, DeclareWarAction.DeclareWarDetail detail)
+        {
+            foreach (FeastObject feast in Feasts.ToList())
 			{
 				if (feast.kingdom == faction1)
 				{
@@ -75,74 +79,114 @@ namespace TodayWeFeast
 			}
 		}
 
-		private void OnDailyTick()
-		{
-			foreach (FeastObject f in Feasts.ToList())
-			{
-				InformationManager.DisplayMessage(new InformationMessage((f.kingdom.Name.Contains("Empire") ? "The " + f.kingdom.Name.ToString() : f.kingdom.Name.ToString()) + " is currently hosting a feast at " + f.feastSettlement.ToString()));
-				this.addRelation(f);
-				f.dailyFeastTick();
-			}
-
-			Hero hostOfFeast = null;
-			Settlement feastSettlement = null;
-			Kingdom kingdom = null;
-			List<Hero> lordsToInvite = new List<Hero>();
-
-			foreach (Kingdom k in getKingdomsAtPeace())
-			{
-				if (this.feastIsPresent(k) || !canHaveFeast(k))
-				{
-					continue;
-				}
-				var clanLeaders = this.getAllClanLeadersInKingdom(k);
-				foreach (Hero partyLeader in clanLeaders)
-				{
-					int randomGen = MBRandom.RandomInt(0, 100);
-					float foodContribution = calculateFoodContribution(partyLeader);
-					if (partyLeader != Hero.MainHero && randomGen > 98 && partyLeader.Spouse != null && partyLeader.Gold > 20000 && partyLeader.Clan.Fiefs.Count > 0 && !this.feastIsPresent(k) && foodContribution > 20f)
-					{
-						hostOfFeast = partyLeader;
-						feastSettlement = hostOfFeast.HomeSettlement;
-						kingdom = hostOfFeast.Clan.Kingdom;
-						var currentFeast = this.createFeast(hostOfFeast, feastSettlement, kingdom, getAllClanMembersInKingdomWhoWantToJoin(kingdom, hostOfFeast), foodContribution);
-						this.Feasts.Add(currentFeast);
-						InformationManager.DisplayMessage(new InformationMessage(currentFeast.hostOfFeast.Name.ToString() + " is hosting a feast! The lords of the realm are gathering at " + currentFeast.feastSettlement + " to celebrate!"));
-					}
-				}
-			}
-		}
-
-		public float calculateFoodContribution(Hero hero)
-		{
-			if (hero.PartyBelongedTo != null)
+        private void OnDailyTick()
+        {
+            // This existing loop handles the daily tick for each feast
+            foreach (FeastObject f in Feasts.ToList())
             {
-				//get 80% of current food total
-				var result = ((float)hero.PartyBelongedTo.Food / 100) * 80;
-				return result;
-				//return MBRandom.RandomFloatRanged(0f, result);
-			} else
-            {
-				return 0f;
+                InformationManager.DisplayMessage(new InformationMessage((f.kingdom.Name.Contains("Empire") ? "The " + f.kingdom.Name.ToString() : f.kingdom.Name.ToString()) + " is currently hosting a feast at " + f.feastSettlement.ToString()));
+                f.dailyFeastTick();
+
+                // --- ADD THIS NEW LOGIC ---
+                // Check if an AI host should add more food to their ongoing feast.
+                if (f.hostOfFeast != Hero.MainHero) // Is the host an AI?
+                {
+                    // Is the food running low? (e.g., less than 2 days worth of food left)
+                    int foodThreshold = f.lordsInFeast.Count * 2;
+                    if (f.amountOfFood < foodThreshold)
+                    {
+                        // Does the host have more food to give?
+                        float availableFood = f.hostOfFeast.PartyBelongedTo.Food;
+                        if (availableFood > 20) // Must have a decent surplus to contribute
+                        {
+                            float contribution = calculateFoodContribution(f.hostOfFeast);
+                            if (contribution > 10)
+                            {
+                                f.makeAILordContributeToTheFeast(f.hostOfFeast, contribution);
+
+                                // Notify the player if they are in the same kingdom
+                                if (Hero.MainHero.MapFaction == f.kingdom)
+                                {
+                                    TextObject message = new TextObject("{=feast_restocked}{HOST_NAME} has added more provisions to the feast at {SETTLEMENT_NAME}!");
+                                    message.SetTextVariable("HOST_NAME", f.hostOfFeast.Name);
+                                    message.SetTextVariable("SETTLEMENT_NAME", f.feastSettlement.Name);
+                                    MBInformationManager.AddQuickInformation(message);
+                                }
+                            }
+                        }
+                    }
+                }
+                // --- END NEW LOGIC ---
             }
-		}
 
-		public void addRelation(FeastObject feast)
-		{
-			foreach (Hero lord in feast.lordsInFeast)
-			{
-				if (lord != feast.hostOfFeast && (feast.hostOfFeast.CurrentSettlement == feast.feastSettlement && lord.CurrentSettlement == feast.feastSettlement))
-				{
-					if (lord == Hero.MainHero || feast.hostOfFeast == Hero.MainHero)
-					{
-						ChangeRelationAction.ApplyRelationChangeBetweenHeroes(feast.hostOfFeast, lord, 1, true);
-					} else
-					{
-						ChangeRelationAction.ApplyRelationChangeBetweenHeroes(feast.hostOfFeast, lord, 1, false);
-					}
-				}
-			}
-		}
+            foreach (var kingdom in Kingdom.All.Where(k => !k.IsEliminated))
+            {
+                // --- USER'S CORRECTED LOGIC ---
+                bool isAtWar = false;
+                foreach (StanceLink stance in kingdom.Stances)
+                {
+                    if (stance.IsAtWar)
+                    {
+                        isAtWar = true;
+                        break;
+                    }
+                }
+                // --- END CORRECTION ---
+
+                if (isAtWar || this.feastIsPresent(kingdom) || !canHaveFeast(kingdom))
+                {
+                    continue;
+                }
+
+                // Find the best candidate in the kingdom to host a feast
+                Hero bestHost = null;
+                float highestScore = 0;
+
+                foreach (var clan in kingdom.Clans.Where(c => !c.IsUnderMercenaryService && c.Fiefs.Any() && c.Leader != null))
+                {
+                    var host = clan.Leader;
+                    if (host != Hero.MainHero && host.Spouse != null && host.Gold > 20000)
+                    {
+                        var score = _feastScoringModel.GetFeastHostingScore(host).ResultNumber;
+                        if (score > highestScore)
+                        {
+                            highestScore = score;
+                            bestHost = host;
+                        }
+                    }
+                }
+
+                // If we found a good candidate, they host the feast
+                if (bestHost != null && highestScore > 75f) // The threshold to host
+                {
+                    float foodContribution = calculateFoodContribution(bestHost);
+                    if (foodContribution > 20f)
+                    {
+                        var feastSettlement = bestHost.HomeSettlement;
+                        var lordsToInvite = getAllClanMembersInKingdomWhoWantToJoin(kingdom, bestHost);
+                        var currentFeast = this.createFeast(bestHost, feastSettlement, kingdom, lordsToInvite, foodContribution);
+                        this.Feasts.Add(currentFeast);
+
+                        InformationManager.DisplayMessage(new InformationMessage($"{bestHost.Name} is hosting a feast! The lords of the realm are gathering at {feastSettlement.Name} to celebrate!"));
+                    }
+                }
+            }
+        }
+
+        public float calculateFoodContribution(Hero hero)
+        {
+            if (hero.PartyBelongedTo != null)
+            {
+                //get 80% of current food total
+                var result = ((float) hero.PartyBelongedTo.Food / 100) * 80;
+                return result;
+                //return MBRandom.RandomFloatRanged(0f, result);
+            }
+            else
+            {
+                return 0f;
+            }
+        }
 
 		public bool canHaveFeast(Kingdom kingdom)
         {

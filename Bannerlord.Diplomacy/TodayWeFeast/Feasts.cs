@@ -1,16 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.TournamentGames;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using TaleWorlds.Localization;
 using TaleWorlds.SaveSystem;
 
 namespace TodayWeFeast
 {
-	internal class FeastObject
+	public class FeastObject
     {
 		public FeastObject(Settlement feastSettlementPar, Kingdom kingdomPar, List<Hero> lordsInFeastPar, Hero hostOfFeast, float foodContribution)
         {
@@ -40,42 +43,60 @@ namespace TodayWeFeast
 			}
 		}
 
-		public void sendAllLordsToFeast()
+        // In the FeastObject class, modify the sendAllLordsToFeast method
+        public void sendAllLordsToFeast()
         {
-			foreach (Hero lord in this.lordsInFeast)
+            // Existing notifications for when the player is the host or is invited
+            if (this.hostOfFeast == Hero.MainHero)
             {
-				if (lord == Hero.MainHero && this.hostOfFeast == Hero.MainHero)
-				{
-					InformationManager.ShowInquiry(new InquiryData("Today, We Feast!", "You have decided to host a feast, where the lords of the realm wll gather at " + this.feastSettlement.Name.ToString() + " to celebrate with you!", true, false, "OK", null, null, null), true);
-				}
-				else if (lord == Hero.MainHero && this.hostOfFeast == Hero.MainHero) {
-					InformationManager.ShowInquiry(new InquiryData("Feast Invite", "You have recieved an invitation to a feast hosted by " + this.hostOfFeast.Name + " at his home, " + this.feastSettlement.Name.ToString(), true, false, "OK", null, null, null), true);
-				}
-				else if (lord.PartyBelongedTo != null && lord.CurrentSettlement != this.feastSettlement)
-				{
-					lord.PartyBelongedTo.Ai.SetMoveGoToSettlement(this.feastSettlement);
-					lord.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(true);
-				}
-				else if (lord.PartyBelongedTo != null && lord.CurrentSettlement == feastSettlement)
-				{
-					lord.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(true);
-				}
+                InformationManager.ShowInquiry(new InquiryData("Today, We Feast!", $"You have decided to host a feast, where the lords of the realm will gather at {this.feastSettlement.Name} to celebrate with you!", true, false, "OK", null, null, null), true);
             }
+            else if (this.lordsInFeast.Contains(Hero.MainHero))
+            {
+                InformationManager.ShowInquiry(new InquiryData("Feast Invite", $"You have received an invitation to a feast hosted by {this.hostOfFeast.Name} at his home, {this.feastSettlement.Name}", true, false, "OK", null, null, null), true);
+            }
+
+            // --- ADD THIS NEW LOGIC ---
+            // If the feast is in the player's kingdom, but not hosted by the player, show a map notification.
+            if (this.hostOfFeast != Hero.MainHero && this.kingdom == Hero.MainHero.MapFaction)
+            {
+                TextObject message = new TextObject("{=feast_notification}A feast has begun at {SETTLEMENT_NAME}, hosted by {HOST_NAME}!");
+                message.SetTextVariable("SETTLEMENT_NAME", this.feastSettlement.Name);
+                message.SetTextVariable("HOST_NAME", this.hostOfFeast.Name);
+                MBInformationManager.AddQuickInformation(message);
+            }
+            // --- END NEW LOGIC ---
         }
 
-		public void endFeast()
+        public void endFeast()
 		{
-			foreach(Hero hero in this.lordsInFeast)
+            // --- Start of new reward logic ---
+            InformationManager.DisplayMessage(new InformationMessage($"The feast at {this.feastSettlement.Name} has ended.", Colors.Green));
+
+            // Grant rewards to the host
+            this.hostOfFeast.Clan.AddRenown(50, true);
+            this.hostOfFeast.AddSkillXp(DefaultSkills.Steward, 1000);
+
+            // Grant relation to attendees
+            foreach (Hero hero in this.lordsInFeast)
             {
-				if (hero.PartyBelongedTo != null && hero != Hero.MainHero)
-				{
-					hero.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
-				}
+                if (hero.PartyBelongedTo != null && hero != Hero.MainHero)
+                {
+                    hero.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+                }
+
+                // Grant a final relation boost
+                if (hero != this.hostOfFeast)
+                {
+                    ChangeRelationAction.ApplyRelationChangeBetweenHeroes(this.hostOfFeast, hero, 5, true);
+                }
             }
-			//End the tournament at the feast if there is one
-			if (this.feastSettlement.IsTown)
-			{
-				Town town = this.feastSettlement.Town;
+            // --- End of new reward logic ---
+
+            //End the tournament at the feast if there is one
+            if (this.feastSettlement.IsTown)
+            {
+                Town town = this.feastSettlement.Town;
 				ITournamentManager tournamentManager = Campaign.Current.TournamentManager;
 				TournamentGame tournamentGame = tournamentManager.GetTournamentGame(town);
 				if (tournamentGame != null)
@@ -83,9 +104,9 @@ namespace TodayWeFeast
 					tournamentManager.ResolveTournament(tournamentGame, town);
 				}
 			}
-			FeastBehavior.Instance.Feasts.Remove(this);
-			FeastBehavior.Instance.timeSinceLastFeast.Add(this.kingdom, CampaignTime.Now.ToDays);
-			InformationManager.DisplayMessage(new InformationMessage("The feast at " + this.feastSettlement.Name.ToString() + " has ended."));
+            FeastBehavior.Instance.Feasts.Remove(this);
+            FeastBehavior.Instance.timeSinceLastFeast.Add(this.kingdom, CampaignTime.Now.ToDays);
+            InformationManager.DisplayMessage(new InformationMessage("The feast at " + this.feastSettlement.Name.ToString() + " has ended."));
 		}
 
 		public void dailyFeastTick()

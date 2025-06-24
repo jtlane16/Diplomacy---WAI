@@ -341,13 +341,26 @@ namespace WarAndAiTweaks.AI
                 if (daysSinceLastWar < WAR_FATIGUE_RAMP_DAYS)
                 {
                     float fatiguePenalty = MAX_WAR_FATIGUE_PENALTY * (1 - (daysSinceLastWar / WAR_FATIGUE_RAMP_DAYS));
-                    explainedNumber.Add(fatiguePenalty, new TextObject("recovering from the last war"));
+                    explainedNumber.Add(fatiguePenalty, new TextObject("Recovering from the last war"));
                 }
 
+                // War Desire: Builds up quickly over 30 days.
                 float warDesire = Math.Min(daysSinceLastWar * MAX_WAR_DESIRE / WAR_DESIRE_RAMP_DAYS, MAX_WAR_DESIRE);
                 if (warDesire > 0)
                 {
-                    explainedNumber.Add(warDesire, new TextObject("War Desire (from peace time)"));
+                    explainedNumber.Add(warDesire, new TextObject("Desire for war (from peace time)"));
+                }
+
+                // Post-War Political Cooldown: A short, very harsh penalty.
+                var mostRecentPeace = lastPeaceTimes.Values.OrderByDescending(t => t.ToDays).FirstOrDefault();
+                if (mostRecentPeace != default(CampaignTime))
+                {
+                    var daysSinceAnyPeace = CampaignTime.Now.ToDays - mostRecentPeace.ToDays;
+                    if (daysSinceAnyPeace < 20) // Apply a heavy penalty for 20 days after ANY peace treaty.
+                    {
+                        var penalty = RECENT_PEACE_PENALTY_MAX * (float) (1 - (daysSinceAnyPeace / 20f));
+                        explainedNumber.Add(penalty, new TextObject("Consolidating after a recent war"));
+                    }
                 }
 
                 if (FeastBehavior.Instance != null && FeastBehavior.Instance.feastIsPresent(b))
@@ -482,8 +495,8 @@ namespace WarAndAiTweaks.AI
             private const float CasualtiesWeight = 30f;
             private const float FiefLossWeight = 30f;
             private const float RaidWeight = 10f;
-            private const float DistanceWeight = 10f;
             private const float MaxDistance = 1500f;
+            private const float WarWearinessFromDistanceWeight = 120f;
 
             public ExplainedNumber GetPeaceScore(Kingdom k, Kingdom enemy)
             {
@@ -514,7 +527,7 @@ namespace WarAndAiTweaks.AI
                 explainedNumber.Add(successfulRaids * 5f * (RaidWeight / 100f), new TextObject("successful raids against them"));
 
                 float distBonus = ComputeDistanceBonus(k, enemy);
-                explainedNumber.Add(distBonus, new TextObject("the distance between their kingdoms"));
+                explainedNumber.Add(distBonus, new TextObject("War weariness from distance")); // Updated the description
 
                 return explainedNumber;
             }
@@ -529,7 +542,8 @@ namespace WarAndAiTweaks.AI
                 var posA = new Vec2(aList.Average(s => s.Position2D.X), aList.Average(s => s.Position2D.Y));
                 var posB = new Vec2(bList.Average(s => s.Position2D.X), bList.Average(s => s.Position2D.Y));
                 float dist = posA.Distance(posB);
-                return TWMathF.Clamp(dist / MaxDistance, 0f, 1f) * DistanceWeight;
+                return TWMathF.Clamp(dist / MaxDistance, 0f, 1f) * WarWearinessFromDistanceWeight;
+
             }
         }
     }

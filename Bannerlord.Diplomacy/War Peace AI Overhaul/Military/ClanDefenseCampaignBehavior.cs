@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.MapEvents;
@@ -7,6 +8,7 @@ using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Siege;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using TaleWorlds.LinQuick;
 
 using TodayWeFeast;
 
@@ -33,20 +35,17 @@ namespace WarAndAiTweaks.AI.Behaviors
                 return;
             }
 
-
             if (mobileParty.Army != null && mobileParty.Army.LeaderParty != mobileParty)
             {
                 var escortBehavior = new AIBehaviorTuple(mobileParty.Army.LeaderParty, AiBehavior.EscortParty);
-                thinkParams.AIBehaviorScores.Add((escortBehavior, 500f)); // Extremely high score to ensure army cohesion
+                thinkParams.AIBehaviorScores.Add((escortBehavior, 500f));
                 return;
             }
 
             AIBehaviorTuple bestOption = new AIBehaviorTuple(null, AiBehavior.Hold);
             float maxScore = 0f;
 
-            EvaluateFeastActions(mobileParty, ref bestOption, ref maxScore); // <-- ADD THIS LINE
-            EvaluateDefensiveActions(mobileParty, ref bestOption, ref maxScore);
-
+            EvaluateFeastActions(mobileParty, ref bestOption, ref maxScore);
             EvaluateDefensiveActions(mobileParty, ref bestOption, ref maxScore);
             EvaluateOpportunisticActions(mobileParty, ref bestOption, ref maxScore);
             EvaluateRecruitmentActions(mobileParty, ref bestOption, ref maxScore);
@@ -59,13 +58,101 @@ namespace WarAndAiTweaks.AI.Behaviors
             }
         }
 
+        // --- HELPER METHOD FOR RECRUITMENT ---
+        private int ApproximateNumberOfVolunteersCanBeRecruitedFromSettlement(Hero hero, Settlement settlement)
+        {
+            int num = 4;
+            if (hero.MapFaction != settlement.MapFaction)
+            {
+                num = 2;
+            }
+            int num2 = 0;
+            if (settlement.Notables != null)
+            {
+                foreach (Hero hero2 in settlement.Notables)
+                {
+                    if (hero2.IsAlive)
+                    {
+                        for (int i = 0; i < num; i++)
+                        {
+                            if (hero2.VolunteerTypes[i] != null)
+                            {
+                                num2++;
+                            }
+                        }
+                    }
+                }
+            }
+            return num2;
+        }
+
+        // --- FULLY REWRITTEN & CORRECTED METHOD ---
+        private void EvaluateRecruitmentActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
+        {
+            // If party is already strong, no need to focus on recruiting.
+            if (mobileParty.Party.NumberOfAllMembers >= mobileParty.LimitedPartySize * 0.8f)
+            {
+                return;
+            }
+
+            // If a lord's party is critically weak, they should be desperate to get more troops.
+            float desperationMultiplier = 1.0f;
+            if (mobileParty.Party.NumberOfAllMembers < mobileParty.LimitedPartySize * 0.25f)
+            {
+                // When weak, the drive to recruit is 5 times stronger.
+                desperationMultiplier = 5.0f;
+            }
+
+            // A single, safe loop through all settlements.
+            foreach (Settlement settlement in Settlement.All)
+            {
+                // We only care about Towns and Castles for recruitment.
+                if (!settlement.IsTown && !settlement.IsCastle)
+                {
+                    continue;
+                }
+
+                // Don't go to hostile settlements to recruit.
+                if (settlement.IsInspected && FactionManager.IsAtWarAgainstFaction(settlement.MapFaction, mobileParty.MapFaction))
+                {
+                    continue;
+                }
+
+                float distance = mobileParty.Position2D.Distance(settlement.Position2D);
+                if (distance > 250) continue; // Don't travel across the map for troops.
+
+                int totalTroopsAvailable = 0;
+
+                // Option 1: Recruit from the local population (notables). This works for both towns and castles.
+                totalTroopsAvailable = ApproximateNumberOfVolunteersCanBeRecruitedFromSettlement(mobileParty.LeaderHero, settlement);
+
+                // Option 2: If this is the clan's own fief, check the garrison.
+                if (settlement.IsTown && mobileParty.LeaderHero.Clan.Fiefs.Contains(settlement.Town))
+                {
+                    // Fix: Pass the correct type 'Settlement' instead of 'Town'.
+                    totalTroopsAvailable += Campaign.Current.Models.SettlementGarrisonModel.FindNumberOfTroopsToTakeFromGarrison(mobileParty, settlement);
+                }
+
+                if (totalTroopsAvailable > 5)
+                {
+                    float score = ((totalTroopsAvailable * 2.0f) - (distance * 0.2f)) * desperationMultiplier;
+
+                    if (score > maxScore)
+                    {
+                        maxScore = score;
+                        bestOption = new AIBehaviorTuple(settlement, AiBehavior.GoToSettlement);
+                    }
+                }
+            }
+        }
+
+        // --- Your other AI evaluation methods (EvaluateDefensiveActions, etc.) go here ---
         private void EvaluateFeastActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
         {
             if (FeastBehavior.Instance?.Feasts == null) return;
 
             foreach (var feast in FeastBehavior.Instance.Feasts)
             {
-                // Check if this lord is invited to the feast
                 if (feast.lordsInFeast.Contains(mobileParty.LeaderHero))
                 {
                     var score = _feastAttendingScoringModel.GetFeastAttendingScore(mobileParty.LeaderHero, feast);
@@ -77,7 +164,6 @@ namespace WarAndAiTweaks.AI.Behaviors
                 }
             }
         }
-
         private void EvaluateDefensiveActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
         {
             Clan partyClan = mobileParty.LeaderHero.Clan;
@@ -118,7 +204,6 @@ namespace WarAndAiTweaks.AI.Behaviors
                 }
             }
         }
-
         private void EvaluateOpportunisticActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
         {
             if (mobileParty.Party.NumberOfHealthyMembers < mobileParty.Party.NumberOfAllMembers * 0.5f)
@@ -169,37 +254,6 @@ namespace WarAndAiTweaks.AI.Behaviors
                 }
             }
         }
-
-        private void EvaluateRecruitmentActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
-        {
-            if (mobileParty.Party.NumberOfAllMembers >= mobileParty.LimitedPartySize * 0.8f)
-            {
-                return;
-            }
-
-            foreach (Settlement settlement in mobileParty.LeaderHero.Clan.Settlements)
-            {
-                if (settlement.IsTown || settlement.IsCastle)
-                {
-                    int troopsToTake = Campaign.Current.Models.SettlementGarrisonModel.FindNumberOfTroopsToTakeFromGarrison(mobileParty, settlement);
-
-                    if (troopsToTake > 5)
-                    {
-                        float distance = mobileParty.Position2D.Distance(settlement.Position2D);
-                        if (distance > 150) continue;
-
-                        float score = (troopsToTake * 1.5f) - (distance * 0.2f);
-
-                        if (score > maxScore)
-                        {
-                            maxScore = score;
-                            bestOption = new AIBehaviorTuple(settlement, AiBehavior.GoToSettlement);
-                        }
-                    }
-                }
-            }
-        }
-
         private void EvaluateSiegeSupportActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
         {
             if (mobileParty.Party.NumberOfHealthyMembers < mobileParty.Party.NumberOfAllMembers * 0.7f)
@@ -209,7 +263,6 @@ namespace WarAndAiTweaks.AI.Behaviors
 
             foreach (var siegeEvent in Campaign.Current.SiegeEventManager.SiegeEvents)
             {
-                // ADDED: Prevent the besieging army from trying to support its own siege.
                 if (siegeEvent.BesiegerCamp.LeaderParty == mobileParty)
                 {
                     continue;
@@ -246,7 +299,6 @@ namespace WarAndAiTweaks.AI.Behaviors
                 }
             }
         }
-
         private void DeprioritizeArmyRaiding(PartyThinkParams thinkParams)
         {
             var scores = thinkParams.AIBehaviorScores;

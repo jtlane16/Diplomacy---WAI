@@ -2,6 +2,8 @@
 
 using HarmonyLib;
 
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
 using System;
 using System.Linq;
 using System.Reflection;
@@ -142,20 +144,44 @@ namespace Diplomacy.War_Peace_AI_Overhaul
         {
             public static void Postfix(Hero partyLeader, IFaction partyMapFaction, Clan actualClan, ref ExplainedNumber result)
             {
+                float townbonus = 0f;
+                float castlebonus = 0f;
+                float villagebonus = 0f;
+
+                // Ensure the variables are properly scoped and initialized
                 if (partyLeader == null || partyMapFaction == null || actualClan == null)
                 {
                     return;
                 }
-                foreach (Settlement settlement in actualClan.Settlements.Where(x => x.IsCastle || x.IsTown))
+
+                foreach (Settlement settlement in actualClan.Settlements)
                 {
-                    if (settlement.IsTown)
+                    if (settlement.IsVillage)
                     {
-                        result.Add(10f, new TextObject("Bonus from town " + settlement.Name.ToString()));
+                        villagebonus += 1f;
                     }
                     else if (settlement.IsCastle)
                     {
-                        result.Add(5f, new TextObject("Bonus from castle " + settlement.Name.ToString()));
+                        castlebonus += 5f;
                     }
+                    else if (settlement.IsTown)
+                    {
+                        townbonus += 10f;
+                    }
+                }
+
+                // Add bonuses to the result
+                if (villagebonus > 0f)
+                {
+                    result.Add(villagebonus, new TaleWorlds.Localization.TextObject("Villages bonus"));
+                }
+                if (castlebonus > 0f)
+                {
+                    result.Add(castlebonus, new TaleWorlds.Localization.TextObject("Castles bonus"));
+                }
+                if (townbonus > 0f)
+                {
+                    result.Add(townbonus, new TaleWorlds.Localization.TextObject("Towns bonus"));
                 }
             }
         }

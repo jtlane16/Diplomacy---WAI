@@ -13,6 +13,7 @@ using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Settlements.Buildings;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
@@ -182,6 +183,20 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                 if (townbonus > 0f)
                 {
                     result.Add(townbonus, new TaleWorlds.Localization.TextObject("Towns bonus"));
+                }
+            }
+        }
+        [HarmonyPatch(typeof(DefaultClanFinanceModel), "CalculatePartyWage")]
+        public class CalculatePartyWagePatch
+        {
+            // The method signature in your file is slightly different from your post,
+            // so I will use the one from your existing FillStacks patch for accuracy.
+            public static void Postfix(MobileParty mobileParty, ref int __result)
+            {
+                if (mobileParty.IsGarrison)
+                {
+                    // THE FIX: Cast the entire calculation to an (int).
+                    __result = (int) (__result * 0.5f); // Reduce garrison wages by 50%
                 }
             }
         }

@@ -35,6 +35,16 @@ namespace WarAndAiTweaks.AI.Behaviors
                 return;
             }
 
+            // If the party is an army leader and is ALREADY besieging a settlement,
+            // give it a massive score bonus to continue the siege. This makes the
+            // behavior "sticky" and prevents the AI from easily abandoning it.
+            if (mobileParty.Army != null && mobileParty.Army.LeaderParty == mobileParty && mobileParty.BesiegedSettlement != null)
+            {
+                // Add a very high score to ensure the siege continues.
+                thinkParams.AIBehaviorScores.Add((new AIBehaviorTuple(mobileParty.BesiegedSettlement, AiBehavior.BesiegeSettlement), 300f));
+                return; // By returning here, we don't even evaluate other, lesser priorities.
+            }
+
             if (mobileParty.Army != null && mobileParty.Army.LeaderParty != mobileParty)
             {
                 var escortBehavior = new AIBehaviorTuple(mobileParty.Army.LeaderParty, AiBehavior.EscortParty);
@@ -58,35 +68,7 @@ namespace WarAndAiTweaks.AI.Behaviors
             }
         }
 
-        // --- HELPER METHOD FOR RECRUITMENT ---
-        private int ApproximateNumberOfVolunteersCanBeRecruitedFromSettlement(Hero hero, Settlement settlement)
-        {
-            int num = 4;
-            if (hero.MapFaction != settlement.MapFaction)
-            {
-                num = 2;
-            }
-            int num2 = 0;
-            if (settlement.Notables != null)
-            {
-                foreach (Hero hero2 in settlement.Notables)
-                {
-                    if (hero2.IsAlive)
-                    {
-                        for (int i = 0; i < num; i++)
-                        {
-                            if (hero2.VolunteerTypes[i] != null)
-                            {
-                                num2++;
-                            }
-                        }
-                    }
-                }
-            }
-            return num2;
-        }
-
-        // --- FULLY REWRITTEN & CORRECTED METHOD ---
+        // --- YOUR CORRECTED RECRUITMENT METHOD ---
         private void EvaluateRecruitmentActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
         {
             // If party is already strong, no need to focus on recruiting.
@@ -146,7 +128,90 @@ namespace WarAndAiTweaks.AI.Behaviors
             }
         }
 
-        // --- Your other AI evaluation methods (EvaluateDefensiveActions, etc.) go here ---
+        // --- Other helper methods ---
+        private void EvaluateSiegeSupportActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
+        {
+            if (mobileParty.Army == null)
+            {
+                return;
+            }
+
+            if (mobileParty.Party.NumberOfHealthyMembers < mobileParty.Party.NumberOfAllMembers * 0.7f)
+            {
+                return;
+            }
+
+            if (mobileParty.Army.Cohesion < 30)
+            {
+                return;
+            }
+
+            foreach (var siegeEvent in Campaign.Current.SiegeEventManager.SiegeEvents)
+            {
+                if (siegeEvent.BesiegerCamp.LeaderParty.Army == mobileParty.Army)
+                {
+                    continue;
+                }
+
+                if (siegeEvent.BesiegerCamp.LeaderParty.MapFaction == mobileParty.MapFaction)
+                {
+                    Settlement besiegedSettlement = siegeEvent.BesiegedSettlement;
+
+                    float distance = mobileParty.Position2D.Distance(besiegedSettlement.Position2D);
+                    if (distance > 200)
+                    {
+                        continue;
+                    }
+
+                    float score = 80f;
+
+                    if (besiegedSettlement.IsTown)
+                    {
+                        score += 40f;
+                    }
+                    else if (besiegedSettlement.IsCastle)
+                    {
+                        score += 20f;
+                    }
+
+                    score -= distance * 0.15f;
+
+                    if (score > maxScore)
+                    {
+                        maxScore = score;
+                        bestOption = new AIBehaviorTuple(besiegedSettlement, AiBehavior.BesiegeSettlement);
+                    }
+                }
+            }
+        }
+
+        private int ApproximateNumberOfVolunteersCanBeRecruitedFromSettlement(Hero hero, Settlement settlement)
+        {
+            int num = 4;
+            if (hero.MapFaction != settlement.MapFaction)
+            {
+                num = 2;
+            }
+            int num2 = 0;
+            if (settlement.Notables != null)
+            {
+                foreach (Hero hero2 in settlement.Notables)
+                {
+                    if (hero2.IsAlive)
+                    {
+                        for (int i = 0; i < num; i++)
+                        {
+                            if (hero2.VolunteerTypes[i] != null)
+                            {
+                                num2++;
+                            }
+                        }
+                    }
+                }
+            }
+            return num2;
+        }
+
         private void EvaluateFeastActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
         {
             if (FeastBehavior.Instance?.Feasts == null) return;
@@ -254,51 +319,7 @@ namespace WarAndAiTweaks.AI.Behaviors
                 }
             }
         }
-        private void EvaluateSiegeSupportActions(MobileParty mobileParty, ref AIBehaviorTuple bestOption, ref float maxScore)
-        {
-            if (mobileParty.Party.NumberOfHealthyMembers < mobileParty.Party.NumberOfAllMembers * 0.7f)
-            {
-                return;
-            }
 
-            foreach (var siegeEvent in Campaign.Current.SiegeEventManager.SiegeEvents)
-            {
-                if (siegeEvent.BesiegerCamp.LeaderParty == mobileParty)
-                {
-                    continue;
-                }
-
-                if (siegeEvent.BesiegerCamp.LeaderParty.MapFaction == mobileParty.MapFaction)
-                {
-                    Settlement besiegedSettlement = siegeEvent.BesiegedSettlement;
-
-                    float distance = mobileParty.Position2D.Distance(besiegedSettlement.Position2D);
-                    if (distance > 200)
-                    {
-                        continue;
-                    }
-
-                    float score = 80f;
-
-                    if (besiegedSettlement.IsTown)
-                    {
-                        score += 40f;
-                    }
-                    else if (besiegedSettlement.IsCastle)
-                    {
-                        score += 20f;
-                    }
-
-                    score -= distance * 0.15f;
-
-                    if (score > maxScore)
-                    {
-                        maxScore = score;
-                        bestOption = new AIBehaviorTuple(besiegedSettlement, AiBehavior.PatrolAroundPoint);
-                    }
-                }
-            }
-        }
         private void DeprioritizeArmyRaiding(PartyThinkParams thinkParams)
         {
             var scores = thinkParams.AIBehaviorScores;

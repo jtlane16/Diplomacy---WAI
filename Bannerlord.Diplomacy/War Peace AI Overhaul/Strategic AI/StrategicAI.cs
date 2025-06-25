@@ -18,7 +18,7 @@ using WarAndAiTweaks.AI;
 using WarAndAiTweaks.AI.Goals;
 using WarAndAiTweaks.DiplomaticAction;
 
-using TWMathF = TaleWorlds.Library.MathF;
+using TWMathF = TaleWorlds.Library.MathF; // This alias resolves the ambiguity
 
 namespace WarAndAiTweaks.AI
 {
@@ -28,8 +28,8 @@ namespace WarAndAiTweaks.AI
         public const float WAR_THRESHOLD = 75f;
         public const float WAR_DESIRE_RAMP_DAYS = 30f;
         public const float MAX_WAR_DESIRE = 35f;
-        public const float WAR_FATIGUE_RAMP_DAYS = 90f;
-        public const float MAX_WAR_FATIGUE_PENALTY = -50f;
+        public const float WAR_FATIGUE_RAMP_DAYS = 30f;
+        public const float MAX_WAR_FATIGUE_PENALTY = -75f;
         public const float PEACE_RAMP_DAYS = 30f;
         public const float PEACE_SCORE_THRESHOLD = 30f;
 
@@ -326,7 +326,7 @@ namespace WarAndAiTweaks.AI
             private const float AllianceTerritoryWeight = 15f;
             private const float SharedBorderBonus = 30f;
             private const float NoSharedBorderPenalty = -300f;
-            private const float RECENT_PEACE_PENALTY_MAX = -200f;
+            private const float RECENT_PEACE_PENALTY_MAX = -400f;
             private const float INFAMY_PENALTY_MAX = -100f;
 
             public ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar, Dictionary<string, CampaignTime> lastPeaceTimes)
@@ -495,8 +495,8 @@ namespace WarAndAiTweaks.AI
             private const float CasualtiesWeight = 30f;
             private const float FiefLossWeight = 30f;
             private const float RaidWeight = 10f;
-            private const float MaxDistance = 1500f;
             private const float WarWearinessFromDistanceWeight = 120f;
+            private const float MaxDistance = 1500f;
 
             public ExplainedNumber GetPeaceScore(Kingdom k, Kingdom enemy)
             {
@@ -504,21 +504,31 @@ namespace WarAndAiTweaks.AI
                 var stance = k.GetStanceWith(enemy);
                 if (stance == null || !stance.IsAtWar) return explainedNumber;
 
-                // Multi-Front War Pressure: Add a significant bonus for each active war.
+                var daysAtWar = stance.WarStartDate.ElapsedDaysUntilNow;
+
+                // --- RE-BALANCED LOGIC ---
+                // "Commitment to new war" penalty now decays over 30 days instead of 90.
+                if (daysAtWar < 30f)
+                {
+                    float penalty = -200f * (1 - (daysAtWar / 30f));
+                    explainedNumber.Add(penalty, new TextObject("Commitment to the new war"));
+                }
+
                 int warCount = FactionManager.GetEnemyKingdoms(k).Count();
                 if (warCount > 1)
                 {
-                    // The more wars they are in, the more they want peace.
-                    // The bonus starts at the 2nd war.
                     explainedNumber.Add((warCount - 1) * 35f, new TextObject("Pressure from fighting a multi-front war"));
                 }
 
-                var daysAtWar = stance.WarStartDate.ElapsedDaysUntilNow;
-                float warDurationFactor = Math.Min(daysAtWar / 40f, 1.0f);
+                // "Length of the war" bonus now maxes out at 30 days.
+                float warDurationFactor = Math.Min(daysAtWar / 30f, 1.0f);
                 explainedNumber.Add(warDurationFactor * 100f * (WarDurationWeight / 100f), new TextObject("the length of the war"));
 
+                // "Casualties suffered" impact now maxes out at 30 days.
                 float casualtiesRatio = stance.GetCasualties(k) / (k.TotalStrength + 1f);
-                explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f), new TextObject("casualties suffered"));
+                float casualtyImpactFactor = TWMathF.Min(1f, daysAtWar / 30f);
+                explainedNumber.Add(casualtiesRatio * 100f * (CasualtiesWeight / 100f) * casualtyImpactFactor, new TextObject("casualties suffered (war duration considered)"));
+                // --- END RE-BALANCED LOGIC ---
 
                 int fiefsLost = stance.GetSuccessfulSieges(enemy);
                 explainedNumber.Add(fiefsLost * 10f * (FiefLossWeight / 100f), new TextObject("fiefs lost in the war"));
@@ -527,7 +537,7 @@ namespace WarAndAiTweaks.AI
                 explainedNumber.Add(successfulRaids * 5f * (RaidWeight / 100f), new TextObject("successful raids against them"));
 
                 float distBonus = ComputeDistanceBonus(k, enemy);
-                explainedNumber.Add(distBonus, new TextObject("War weariness from distance")); // Updated the description
+                explainedNumber.Add(distBonus, new TextObject("War weariness from distance"));
 
                 return explainedNumber;
             }
@@ -543,7 +553,6 @@ namespace WarAndAiTweaks.AI
                 var posB = new Vec2(bList.Average(s => s.Position2D.X), bList.Average(s => s.Position2D.Y));
                 float dist = posA.Distance(posB);
                 return TWMathF.Clamp(dist / MaxDistance, 0f, 1f) * WarWearinessFromDistanceWeight;
-
             }
         }
     }

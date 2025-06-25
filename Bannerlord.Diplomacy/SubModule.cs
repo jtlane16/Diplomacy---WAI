@@ -13,6 +13,8 @@ using TodayWeFeast;
 
 using WarAndAiTweaks.AI.Behaviors;
 using WarAndAiTweaks.DiplomaticAction;
+using WarAndAiTweaks.Systems;
+using WarAndAiTweaks.AI;
 
 namespace WarAndAiTweaks
 {
@@ -50,7 +52,8 @@ namespace WarAndAiTweaks
                 campaignStarter.AddBehavior(new InfamyManager()); // Add this line
                 campaignStarter.AddBehavior(new ClanDefenseCampaignBehavior());
                 campaignStarter.AddBehavior(FeastBehavior.Instance);
-
+                campaignStarter.AddBehavior(new SettlementCultureChangerBehavior());
+                AIComputationLogger.ClearLog();
             }
         }
 

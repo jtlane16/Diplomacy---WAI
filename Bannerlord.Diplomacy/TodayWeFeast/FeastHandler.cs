@@ -156,7 +156,7 @@ namespace TodayWeFeast
                 }
 
                 // If we found a good candidate, they host the feast
-                if (bestHost != null && highestScore > 75f) // The threshold to host
+                if (bestHost != null && highestScore > 65f) // The threshold to host
                 {
                     float foodContribution = calculateFoodContribution(bestHost);
                     if (foodContribution > 20f)

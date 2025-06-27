@@ -1,11 +1,17 @@
 ﻿// In: Bannerlord.Diplomacy/War Peace AI Overhaul/Strategic AI/GoalSystem/ExpandedGoal.cs
 
+using Diplomacy;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
+
 using TaleWorlds.CampaignSystem;
-using Diplomacy;
+
+using TodayWeFeast;
+
 using WarAndAiTweaks.AI;
+
 using static WarAndAiTweaks.AI.StrategicAI;
 
 namespace WarAndAiTweaks.AI.Goals
@@ -60,6 +66,24 @@ namespace WarAndAiTweaks.AI.Goals
             }
 
             this.Priority = bestTarget != null ? bestScore : 0;
+
+            if (FeastBehavior.Instance != null)
+            {
+                // Strong reduction if we're hosting a feast
+                if (FeastBehavior.Instance.feastIsPresent(Kingdom))
+                {
+                    this.Priority *= 0.3f; // Reduce to 30% of normal priority
+                }
+
+                // Moderate reduction during feast season
+                var currentSeason = CampaignTime.Now.GetSeasonOfYear;
+                if ((currentSeason == CampaignTime.Seasons.Winter || currentSeason == CampaignTime.Seasons.Autumn)
+                    && FeastBehavior.Instance.Feasts.Any())
+                {
+                    this.Priority *= 0.7f; // Reduce to 70% during active feast seasons
+                }
+            }
+
             this.Target = bestTarget;
         }
 

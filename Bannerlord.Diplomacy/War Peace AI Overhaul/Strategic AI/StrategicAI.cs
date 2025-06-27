@@ -59,10 +59,17 @@ namespace WarAndAiTweaks.AI
             UpdateWarTimer();
             UpdatePeaceTimer();
 
+            // NEW: Evaluate alliance value before any actions
+            var allianceValue = EvaluateCurrentAllianceValue();
+
             switch (_currentGoal.Type)
             {
                 case GoalType.Expand:
-                    ExecuteExpansion(ref warDeclaredThisTick, _currentGoal as ExpandGoal);
+                    // NEW: Only consider betrayal if expansion is truly blocked
+                    if (IsExpansionBlocked() && allianceValue.weakestAlly != null)
+                    {
+                        ExecuteExpansion(ref warDeclaredThisTick, _currentGoal as ExpandGoal);
+                    }
                     break;
                 case GoalType.Survive:
                     ExecuteSurvival(_currentGoal as SurviveGoal);
@@ -72,57 +79,40 @@ namespace WarAndAiTweaks.AI
                     break;
             }
 
-            var currentAllies = _owner.GetAlliedKingdoms().ToList();
-            if (currentAllies.Count > 1)
+            // NEW: Smarter alliance breaking logic
+            if (ShouldConsiderBetrayalTiming())
             {
-                var breakAllianceScoringModel = new BreakAllianceScoringModel();
-                Kingdom? weakestAlly = null;
-                float highestBreakScore = float.MinValue;
-                ExplainedNumber breakScoreExplained = new ExplainedNumber();
-
-                foreach (var ally in currentAllies)
-                {
-                    var currentBreakScore = breakAllianceScoringModel.GetBreakAllianceScore(_owner, ally);
-                    if (currentBreakScore.ResultNumber > highestBreakScore)
-                    {
-                        highestBreakScore = currentBreakScore.ResultNumber;
-                        weakestAlly = ally;
-                        breakScoreExplained = currentBreakScore;
-                    }
-                }
-
-                if (weakestAlly != null)
-                {
-                    if (breakAllianceScoringModel.ShouldBreakAlliance(_owner, weakestAlly))
-                    {
-                        string reason = GetPrimaryReason(breakScoreExplained);
-                        BreakAllianceAction.Apply(_owner, weakestAlly, reason);
-                        AIComputationLogger.LogBetrayalDecision(_owner, weakestAlly, highestBreakScore, reason);
-                        return;
-                    }
-                }
+                HandleAllianceBetrayalLogic(allianceValue);
             }
+        }
 
-            if (_currentGoal.Type == GoalType.Expand && (_currentGoal as ExpandGoal)?.Target == null && !warDeclaredThisTick)
-            {
-                var betrayalScoringModel = new BreakAllianceScoringModel();
-                var allies = _owner.GetAlliedKingdoms().ToList();
+        private bool IsExpansionBlocked()
+        {
+            // Check if all viable targets are allied or protected
+            var candidates = Kingdom.All.Where(k =>
+                k != _owner &&
+                !_owner.IsAtWarWith(k) &&
+                !FactionManager.IsAlliedWithFaction(_owner, k) &&
+                !DiplomaticAgreementManager.HasNonAggressionPact(_owner, k, out _));
 
-                if (allies.Any())
-                {
-                    var bestAllyToBetray = allies
-                        .OrderByDescending(ally => betrayalScoringModel.GetBreakAllianceScore(_owner, ally).ResultNumber)
-                        .FirstOrDefault();
+            return !candidates.Any() || candidates.All(k => k.TotalStrength > _owner.TotalStrength * 1.5f);
+        }
 
-                    if (bestAllyToBetray != null && betrayalScoringModel.ShouldBreakAlliance(_owner, bestAllyToBetray))
-                    {
-                        var breakScore = betrayalScoringModel.GetBreakAllianceScore(_owner, bestAllyToBetray);
-                        string reason = GetPrimaryReason(breakScore);
-                        BreakAllianceAction.Apply(_owner, bestAllyToBetray, reason);
-                        AIComputationLogger.LogBetrayalDecision(_owner, bestAllyToBetray, breakScore.ResultNumber, reason);
-                    }
-                }
-            }
+        private bool ShouldConsiderBetrayalTiming()
+        {
+            // NEW: Only betray during optimal windows
+            var currentSeason = CampaignTime.Now.GetSeasonOfYear;
+
+            // Don't betray during winter (harsh campaign conditions)
+            if (currentSeason == CampaignTime.Seasons.Winter) return false;
+
+            // Don't betray if we're economically strained
+            if (_owner.RulingClan.Gold < 100000) return false;
+
+            // Don't betray if we have active feasts
+            if (FeastBehavior.Instance?.feastIsPresent(_owner) == true) return false;
+
+            return true;
         }
 
         private void ExecuteStrengthening()
@@ -199,6 +189,24 @@ namespace WarAndAiTweaks.AI
             var bestTarget = goal.Target;
             var score = goal.Priority;
 
+            // Enhanced feast-related war reluctance
+            if (FeastBehavior.Instance != null)
+            {
+                score = ApplyFeastWarPenalties(score, bestTarget);
+                
+                // NEW: Check for diplomatic feast opportunities
+                if (HasDiplomaticFeastOpportunity(bestTarget))
+                {
+                    score -= 100f; // Strong penalty if we could use feasts diplomatically instead
+                }
+            }
+
+            // NEW: Consider economic timing
+            score = ApplyEconomicTimingBonus(score, bestTarget);
+            
+            // NEW: Apply strategic patience for better opportunities
+            score = ApplyStrategicPatienceModifier(score, bestTarget);
+
             AIComputationLogger.LogWarDecision(_owner, bestTarget, score);
 
             bool declared = score >= WAR_THRESHOLD;
@@ -219,6 +227,57 @@ namespace WarAndAiTweaks.AI
 
                 InformationManager.DisplayMessage(new InformationMessage(note));
             }
+        }
+
+        private bool HasDiplomaticFeastOpportunity(Kingdom target)
+        {
+            // Check if we could invite target's lords to our feast instead of warring
+            var ourFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == _owner);
+            if (ourFeast != null && ourFeast.currentDay <= 3)
+            {
+                // Early in our feast - diplomatic opportunity exists
+                var targetLords = target.Lords.Where(l => l.GetRelation(_owner.Leader) > -10);
+                return targetLords.Any(); // We could improve relations instead
+            }
+            return false;
+        }
+
+        private float ApplyEconomicTimingBonus(float score, Kingdom target)
+        {
+            // NEW: Economic opportunity timing
+            if (target.RulingClan.Gold < 50000 && _owner.RulingClan.Gold > target.RulingClan.Gold * 2)
+            {
+                score += 25f; // Strike when enemy is economically weak
+            }
+            
+            // NEW: Harvest season bonus for capturing settlements
+            var currentSeason = CampaignTime.Now.GetSeasonOfYear;
+            if (currentSeason == CampaignTime.Seasons.Autumn)
+            {
+                score += 15f; // Better time to capture and hold territory
+            }
+            
+            return score;
+        }
+
+        private float ApplyStrategicPatienceModifier(float score, Kingdom target)
+        {
+            // NEW: Wait for better opportunities
+            var targetEnemies = FactionManager.GetEnemyKingdoms(target).Count();
+            if (targetEnemies >= 2)
+            {
+                score += 35f; // Strike when they're distracted
+            }
+            
+            // NEW: Avoid wars when target has strong allies
+            var targetAllies = target.GetAlliedKingdoms().ToList();
+            var strongAllies = targetAllies.Count(ally => ally.TotalStrength > _owner.TotalStrength * 0.8f);
+            if (strongAllies > 0)
+            {
+                score -= strongAllies * 40f; // Significant penalty for strong allied opposition
+            }
+            
+            return score;
         }
 
         private void ExecuteSurvival(SurviveGoal? goal)
@@ -310,6 +369,123 @@ namespace WarAndAiTweaks.AI
             return primaryReasonLine.name.ToString();
         }
 
+        private (Kingdom weakestAlly, float value) EvaluateCurrentAllianceValue()
+        {
+            var allies = _owner.GetAlliedKingdoms().ToList();
+            if (!allies.Any())
+            {
+                return (null, 0f);
+            }
+
+            Kingdom weakestAlly = null;
+            float lowestValue = float.MaxValue;
+
+            foreach (var ally in allies)
+            {
+                // Calculate alliance value based on strength, relations, and strategic position
+                float value = ally.TotalStrength * 0.5f; // Base strength value
+
+                // Add relation bonus
+                var relation = _owner.Leader.GetRelation(ally.Leader);
+                value += relation * 2f;
+
+                // Add shared border bonus
+                var sharedBorders = _owner.Settlements.Count(s => s.IsBorderSettlementWith(ally));
+                value += sharedBorders * 10f;
+
+                // Check if this is the weakest alliance
+                if (value < lowestValue)
+                {
+                    lowestValue = value;
+                    weakestAlly = ally;
+                }
+            }
+
+            return (weakestAlly, lowestValue);
+        }
+
+        private void HandleAllianceBetrayalLogic((Kingdom weakestAlly, float value) allianceValue)
+        {
+            if (allianceValue.weakestAlly == null)
+                return;
+
+            // Only consider betrayal if the alliance value is low enough
+            if (allianceValue.value > 100f) // Threshold for valuable alliances
+                return;
+
+            var betrayalScoringModel = new BreakAllianceScoringModel();
+            var betrayalScore = betrayalScoringModel.GetBreakAllianceScore(_owner, allianceValue.weakestAlly);
+
+            if (betrayalScore.ResultNumber > 75f) // Threshold for betrayal
+            {
+                string reason = GetPrimaryReason(betrayalScore);
+
+                // Break the alliance
+                if (FactionManager.IsAlliedWithFaction(_owner, allianceValue.weakestAlly))
+                {
+                    var allianceToBreak = _owner.GetAlliedKingdoms().FirstOrDefault(a =>
+                        a == allianceValue.weakestAlly);
+
+                    if (allianceToBreak != null)
+                    {
+                        BreakAllianceAction.Apply(_owner, allianceToBreak, reason); // Fix: Added missing arguments
+                        AIComputationLogger.LogBetrayalDecision(_owner, allianceValue.weakestAlly, betrayalScore.ResultNumber, reason);
+
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            $"{_owner.Name} has broken their alliance with {allianceValue.weakestAlly.Name}!"));
+                    }
+                }
+            }
+        }
+
+        private float ApplyFeastWarPenalties(float score, Kingdom target)
+        {
+            // Apply the same feast penalties as in the war evaluator
+            if (FeastBehavior.Instance.feastIsPresent(_owner))
+            {
+                var ourFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == _owner);
+                float basePenalty = -200f;
+
+                if (ourFeast != null)
+                {
+                    float investmentPenalty = (ourFeast.lordsInFeast?.Count ?? 0) * 8f;
+                    float durationPenalty = ourFeast.currentDay * 20f;
+
+                    int generosity = _owner.Leader.GetTraitLevel(DefaultTraits.Generosity);
+                    if (generosity > 0)
+                    {
+                        investmentPenalty += generosity * 25f;
+                    }
+
+                    basePenalty -= investmentPenalty + durationPenalty;
+                }
+
+                score += basePenalty;
+            }
+
+            if (FeastBehavior.Instance.feastIsPresent(target))
+            {
+                var targetFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == target);
+                float basePenalty = -75f;
+                float honorPenalty = _owner.Leader.GetTraitLevel(DefaultTraits.Honor) * 35f;
+
+                if (targetFeast != null)
+                {
+                    float guestPenalty = (targetFeast.lordsInFeast?.Count ?? 0) * 5f;
+
+                    if (targetFeast.currentDay <= 3)
+                    {
+                        guestPenalty += 25f;
+                    }
+
+                    basePenalty -= guestPenalty;
+                }
+
+                score += basePenalty - honorPenalty;
+            }
+
+            return score;
+        }
 
         // --- Nested Evaluator Classes and Interfaces ---
 
@@ -363,17 +539,82 @@ namespace WarAndAiTweaks.AI
                     }
                 }
 
-                if (FeastBehavior.Instance != null && FeastBehavior.Instance.feastIsPresent(b))
+                // Enhanced feast considerations
+                if (FeastBehavior.Instance != null)
                 {
-                    // Apply a penalty if the target kingdom is hosting a feast
-                    float honorPenalty = a.Leader.GetTraitLevel(DefaultTraits.Honor) * 25f;
-                    explainedNumber.Add(-50f - honorPenalty, new TextObject("Attacking while they are feasting would be dishonorable"));
-                }
+                    // Check if target kingdom is hosting a feast
+                    if (FeastBehavior.Instance.feastIsPresent(b))
+                    {
+                        var targetFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == b);
+                        float basePenalty = -75f; // Increased from -50f
+                        float honorPenalty = a.Leader.GetTraitLevel(DefaultTraits.Honor) * 35f; // Increased from 25f
+                        
+                        // Additional penalties based on feast characteristics
+                        if (targetFeast != null)
+                        {
+                            // Penalty increases with feast guest count (more dishonor)
+                            float guestPenalty = (targetFeast.lordsInFeast?.Count ?? 0) * 5f;
+                            
+                            // Penalty increases if it's early in the feast (more disruptive)
+                            if (targetFeast.currentDay <= 3)
+                            {
+                                guestPenalty += 25f; // Early feast disruption is worse
+                            }
+                            
+                            basePenalty -= guestPenalty;
+                        }
+                        
+                        explainedNumber.Add(basePenalty - honorPenalty, new TextObject("Attacking while they are feasting would be dishonorable"));
+                    }
 
-                if (FeastBehavior.Instance != null && FeastBehavior.Instance.feastIsPresent(a))
-                {
-                    // Apply a penalty because declaring war would end their own feast
-                    explainedNumber.Add(-150f, new TextObject("We are hosting a feast and a war would disrupt the festivities"));
+                    // Check if our kingdom is hosting a feast
+                    if (FeastBehavior.Instance.feastIsPresent(a))
+                    {
+                        var ourFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == a);
+                        float basePenalty = -200f; // Increased from -150f
+                        
+                        if (ourFeast != null)
+                        {
+                            // Penalty increases with our investment in the feast
+                            float investmentPenalty = (ourFeast.lordsInFeast?.Count ?? 0) * 8f;
+                            float durationPenalty = ourFeast.currentDay * 20f;
+                            
+                            // Cultural penalty for breaking hospitality traditions
+                            int generosity = a.Leader.GetTraitLevel(DefaultTraits.Generosity);
+                            if (generosity > 0)
+                            {
+                                investmentPenalty += generosity * 25f; // Generous hosts hate abandoning guests
+                            }
+                            
+                            basePenalty -= investmentPenalty + durationPenalty;
+                        }
+                        
+                        explainedNumber.Add(basePenalty, new TextObject("We are hosting a feast and a war would disrupt the festivities"));
+                    }
+
+                    // Check if allies are hosting feasts
+                    var allies = a.GetAlliedKingdoms().ToList();
+                    foreach (var ally in allies)
+                    {
+                        if (FeastBehavior.Instance.feastIsPresent(ally))
+                        {
+                            float allyPenalty = -25f;
+                            float relationBonus = a.GetRelation(ally) > 20 ? -15f : 0f; // Closer allies matter more
+                            explainedNumber.Add(allyPenalty + relationBonus, new TextObject($"Our ally {ally.Name} is hosting a feast"));
+                        }
+                    }
+
+                    // Seasonal feast considerations
+                    var currentSeason = CampaignTime.Now.GetSeasonOfYear;
+                    if (currentSeason == CampaignTime.Seasons.Winter || currentSeason == CampaignTime.Seasons.Autumn)
+                    {
+                        int activeFeastsCount = FeastBehavior.Instance.Feasts.Count;
+                        if (activeFeastsCount > 0)
+                        {
+                            float seasonalPenalty = -activeFeastsCount * 10f;
+                            explainedNumber.Add(seasonalPenalty, new TextObject("Traditional feast season discourages warfare"));
+                        }
+                    }
                 }
 
                 var peaceKey = (string.Compare(a.StringId, b.StringId) < 0) ? $"{a.StringId}_{b.StringId}" : $"{b.StringId}_{a.StringId}";

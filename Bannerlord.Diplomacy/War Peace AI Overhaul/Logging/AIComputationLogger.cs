@@ -7,6 +7,8 @@ using System.Text;
 using Diplomacy.Extensions;
 
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
 
 using WarAndAiTweaks.AI.Goals;
 using WarAndAiTweaks.DiplomaticAction;
@@ -20,6 +22,10 @@ namespace WarAndAiTweaks.AI
     {
         private static readonly string LogFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ai_computation.log");
         private static readonly object _sync = new object();
+
+        // Add this property to control logging detail
+        public static bool EnableDetailedPartyLogging { get; set; } = false;
+        public static float MinimumScoreChangeToLog { get; set; } = 100f; // Only log significant changes
 
         /// <summary>
         /// Clears the entire log file.
@@ -39,7 +45,7 @@ namespace WarAndAiTweaks.AI
             }
         }
 
-        private static void WriteLine(string line)
+        public static void WriteLine(string line)
         {
             try
             {
@@ -181,6 +187,67 @@ namespace WarAndAiTweaks.AI
         public static void LogPactDecision(Kingdom owner, Kingdom target, bool decided, float pactScore, string reason)
         {
             WriteLine($"{DateTime.UtcNow:o},NAP_DECISION,{owner.StringId},{target.StringId},{(decided ? 1 : 0)},{pactScore:F2},\"{reason}\"");
+        }
+
+        // --- Party AI Behavior Logging ---
+        public static void LogDefensiveBehaviorAnalysis(MobileParty party, int threatenedSettlements, int alliedThreatenedSettlements, float totalDefenseBonus)
+        {
+            if (!EnableDetailedPartyLogging) return; // Add this check
+
+            var heroName = party.LeaderHero?.Name?.ToString() ?? "Unknown";
+            var kingdomId = party.LeaderHero?.Clan?.Kingdom?.StringId ?? "None";
+
+            WriteLine($"{DateTime.UtcNow:o},DEFENSIVE_ANALYSIS,{kingdomId},{heroName},{threatenedSettlements},{alliedThreatenedSettlements},{totalDefenseBonus:F2}");
+        }
+
+        public static void LogOffensiveBehaviorAnalysis(MobileParty party, int viableTargets, int weakEnemyParties, float totalOffenseBonus)
+        {
+            if (!EnableDetailedPartyLogging) return; // Add this check
+
+            var heroName = party.LeaderHero?.Name?.ToString() ?? "Unknown";
+            var kingdomId = party.LeaderHero?.Clan?.Kingdom?.StringId ?? "None";
+
+            WriteLine($"{DateTime.UtcNow:o},OFFENSIVE_ANALYSIS,{kingdomId},{heroName},{viableTargets},{weakEnemyParties},{totalOffenseBonus:F2}");
+        }
+
+        public static void LogStrategicPositioning(MobileParty party, bool isMultiFrontWar, bool nearBorder, bool withAllies, float positioningBonus)
+        {
+            if (!EnableDetailedPartyLogging) return; // Add this check
+
+            var heroName = party.LeaderHero?.Name?.ToString() ?? "Unknown";
+            var kingdomId = party.LeaderHero?.Clan?.Kingdom?.StringId ?? "None";
+
+            WriteLine($"{DateTime.UtcNow:o},STRATEGIC_POSITIONING,{kingdomId},{heroName},{(isMultiFrontWar ? 1 : 0)},{(nearBorder ? 1 : 0)},{(withAllies ? 1 : 0)},{positioningBonus:F2}");
+        }
+
+        public static void LogFeastBehaviorImpact(MobileParty party, bool attendingFeast, bool kingdomFeasting, bool enemyFeasting, float feastImpact)
+        {
+            if (!EnableDetailedPartyLogging) return; // Add this check
+
+            var heroName = party.LeaderHero?.Name?.ToString() ?? "Unknown";
+            var kingdomId = party.LeaderHero?.Clan?.Kingdom?.StringId ?? "None";
+
+            WriteLine($"{DateTime.UtcNow:o},FEAST_BEHAVIOR_IMPACT,{kingdomId},{heroName},{(attendingFeast ? 1 : 0)},{(kingdomFeasting ? 1 : 0)},{(enemyFeasting ? 1 : 0)},{feastImpact:F2}");
+        }
+
+        public static void LogSeasonalBehaviorImpact(MobileParty party, string season, bool isOffensive, bool isDefensive, float seasonalBonus)
+        {
+            if (!EnableDetailedPartyLogging) return; // Add this check
+
+            var heroName = party.LeaderHero?.Name?.ToString() ?? "Unknown";
+            var kingdomId = party.LeaderHero?.Clan?.Kingdom?.StringId ?? "None";
+
+            WriteLine($"{DateTime.UtcNow:o},SEASONAL_BEHAVIOR,{kingdomId},{heroName},{season},{(isOffensive ? 1 : 0)},{(isDefensive ? 1 : 0)},{seasonalBonus:F2}");
+        }
+
+        public static void LogSettlementThreatAssessment(Settlement settlement, Kingdom kingdom, float threatLevel, int nearbyEnemies)
+        {
+            if (!EnableDetailedPartyLogging) return; // Add this check
+
+            var kingdomId = kingdom?.StringId ?? "None";
+            var settlementName = settlement?.Name?.ToString() ?? "Unknown";
+
+            WriteLine($"{DateTime.UtcNow:o},SETTLEMENT_THREAT,{kingdomId},{settlementName},{threatLevel:F2},{nearbyEnemies}");
         }
     }
 }

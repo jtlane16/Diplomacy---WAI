@@ -40,60 +40,103 @@ namespace TodayWeFeast
             {
                 score.Add(20, new TextObject("Is wealthy"));
             }
+            else if (potentialHost.Gold < 30000)
+            {
+                score.Add(-20, new TextObject("Has limited funds"));
+            }
 
-            // This penalty remains a good check on unstable kingdoms.
+            // Leadership and relations
+            if (potentialHost == potentialHost.Clan.Kingdom.Leader)
+            {
+                score.Add(25, new TextObject("Is the ruler"));
+            }
+            else if (potentialHost.Clan.Tier >= 4)
+            {
+                score.Add(15, new TextObject("Is a major noble"));
+            }
+
+            // Settlement quality
+            if (potentialHost.HomeSettlement != null)
+            {
+                if (potentialHost.HomeSettlement.IsTown)
+                {
+                    score.Add(15, new TextObject("Owns a prosperous town"));
+                }
+                else if (potentialHost.HomeSettlement.IsCastle)
+                {
+                    score.Add(10, new TextObject("Has a proper castle"));
+                }
+            }
+
+            // Recent feast hosting penalty
+            var recentFeastPenalty = GetRecentHostingPenalty(potentialHost);
+            if (recentFeastPenalty < 0)
+            {
+                score.Add(recentFeastPenalty, new TextObject("Recently hosted a feast"));
+            }
+
+            // Kingdom stability check
             if (potentialHost.Clan.Kingdom.Lords.Any(l => l.GetRelation(potentialHost.Clan.Kingdom.Leader) < -20))
             {
-                score.Add(-30, new TextObject("Low morale in the realm"));
+                score.Add(-25, new TextObject("Low morale in the realm"));
+            }
+
+            // NEW: Strategic timing bonuses
+            var strategicBonus = GetStrategicTimingBonus(potentialHost);
+            if (strategicBonus > 0)
+            {
+                score.Add(strategicBonus, new TextObject("Strategic timing is favorable"));
+            }
+
+            // NEW: Diplomatic opportunity assessment
+            var diplomaticValue = GetDiplomaticFeastValue(potentialHost);
+            if (diplomaticValue > 0)
+            {
+                score.Add(diplomaticValue, new TextObject("Feast could improve diplomatic relations"));
             }
 
             return score;
         }
-    }
 
-    // NEW: This class provides the logic for an AI host to decide when to end a feast.
-    public class FeastEndingScoringModel
-    {
-        public ExplainedNumber GetFeastEndingScore(FeastObject feast)
+        private float GetRecentHostingPenalty(Hero host)
         {
-            var score = new ExplainedNumber(0f, true);
+            // Check if this hero recently hosted (would need tracking)
+            // For now, return 0, but this could be expanded
+            return 0f;
+        }
 
-            // The desire to end the feast increases each day it goes on.
-            score.Add(feast.currentDay * 8f, new TextObject("Feast Duration"));
+        private float GetStrategicTimingBonus(Hero host)
+        {
+            float bonus = 0f;
+            var kingdom = host.Clan.Kingdom;
 
-            // Low attendance is a major reason to end a feast.
-            float initialGuestCount = feast.initialLordsInFeast.Count > 1 ? feast.initialLordsInFeast.Count : 1;
-            float currentGuestCount = feast.lordsInFeast.Count;
-            float guestRetentionRatio = currentGuestCount / initialGuestCount;
-
-            if (guestRetentionRatio < 0.6f)
+            // Bonus for hosting after military victories
+            var recentWars = FactionManager.GetEnemyKingdoms(kingdom);
+            if (!recentWars.Any()) // Changed from DaysSinceLastWar reference
             {
-                // The score to end the feast increases dramatically as more guests leave.
-                score.Add((1 - guestRetentionRatio) * 150f, new TextObject("Low Attendance"));
+                // Check if recently ended a war (this would need to be tracked separately)
+                bonus += 25f;
             }
 
-            // Running out of food is also a strong motivator to end the party.
-            if (feast.amountOfFood < (feast.lordsInFeast.Count * 2)) // Less than 2 days of food left
+            // Bonus for consolidating power
+            if (kingdom.Clans.Count >= 4 && kingdom.Lords.Average(l => l.GetRelation(kingdom.Leader)) < 10)
             {
-                score.Add(40f, new TextObject("Low food supplies"));
+                bonus += 20f; // Need to improve internal relations
             }
 
-            // If the kingdom goes to war, feasts should end immediately.
-            bool isAtWar = false;
-            foreach (var stance in feast.kingdom.Stances)
-            {
-                if (stance.IsAtWar)
-                {
-                    isAtWar = true;
-                    break;
-                }
-            }
-            if (isAtWar)
-            {
-                score.Add(200f, new TextObject("The Kingdom is now at war"));
-            }
+            return bonus;
+        }
 
-            return score;
+        private float GetDiplomaticFeastValue(Hero host)
+        {
+            var kingdom = host.Clan.Kingdom;
+            var neutralKingdoms = Kingdom.All.Where(k =>
+                k != kingdom &&
+                !kingdom.IsAtWarWith(k) &&
+                !FactionManager.IsAlliedWithFaction(kingdom, k) &&
+                kingdom.Leader.GetRelation(k.Leader) < 20).Count(); // Fixed GetRelation call
+
+            return neutralKingdoms * 5f; // Value for each potential diplomatic target
         }
     }
 }

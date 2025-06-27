@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Diplomacy.Extensions;
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -219,47 +221,208 @@ namespace TodayWeFeast
                 bool isAtWar = FactionManager.GetEnemyKingdoms(kingdom).Any();
                 if (isAtWar || feastIsPresent(kingdom) || !canHaveFeast(kingdom)) continue;
 
-                Hero bestHost = null;
-                float highestScore = 0;
-
-                foreach (var clan in kingdom.Clans.Where(c => !c.IsUnderMercenaryService && c.Fiefs.Any() && c.Leader != null))
+                Hero bestHost = SelectBestFeastHost(kingdom);
+                if (bestHost != null)
                 {
-                    var host = clan.Leader;
-                    if (host != Hero.MainHero && host.Spouse != null && host.Gold > 20000 && host.PartyBelongedTo != null && host.PartyBelongedTo.IsActive)
+                    var hostingDecision = ShouldHostFeast(bestHost, kingdom);
+                    if (hostingDecision.shouldHost)
                     {
-                        var score = _feastScoringModel.GetFeastHostingScore(host).ResultNumber;
-                        if (score > highestScore)
+                        float foodContribution = calculateFoodContribution(bestHost);
+                        if (foodContribution > 20f)
                         {
-                            highestScore = score;
-                            bestHost = host;
-                        }
-                    }
-                }
+                            Feasts.Add(createFeast(bestHost, bestHost.HomeSettlement, kingdom, getAllClanMembersInKingdomWhoWantToJoin(kingdom, bestHost), foodContribution));
 
-                if (bestHost != null && highestScore > 65f)
-                {
-                    float foodContribution = calculateFoodContribution(bestHost);
-                    if (foodContribution > 20f)
-                    {
-                        Feasts.Add(createFeast(bestHost, bestHost.HomeSettlement, kingdom, getAllClanMembersInKingdomWhoWantToJoin(kingdom, bestHost), foodContribution));
-                        InformationManager.DisplayMessage(new InformationMessage($"{bestHost.Name} is hosting a feast! The lords of the realm are gathering at {bestHost.HomeSettlement.Name} to celebrate!"));
+                            string reasonText = hostingDecision.primaryReason;
+                            InformationManager.DisplayMessage(new InformationMessage($"{bestHost.Name} is hosting a feast at {bestHost.HomeSettlement.Name} {reasonText}!"));
+                        }
                     }
                 }
             }
         }
 
+        private Hero SelectBestFeastHost(Kingdom kingdom)
+        {
+            Hero bestHost = null;
+            float highestScore = 0;
+
+            foreach (var clan in kingdom.Clans.Where(c => !c.IsUnderMercenaryService && c.Fiefs.Any() && c.Leader != null))
+            {
+                var host = clan.Leader;
+                if (host != Hero.MainHero && host.Spouse != null && host.Gold > 20000 && host.PartyBelongedTo != null && host.PartyBelongedTo.IsActive)
+                {
+                    var score = _feastScoringModel.GetFeastHostingScore(host).ResultNumber;
+
+                    score += GetSeasonalBonus();
+                    score += GetDiplomaticBonus(host, kingdom);
+                    score += GetStabilityBonus(kingdom);
+                    score += GetCulturalBonus(host);
+
+                    if (score > highestScore)
+                    {
+                        highestScore = score;
+                        bestHost = host;
+                    }
+                }
+            }
+
+            return bestHost;
+        }
+
+        private (bool shouldHost, string primaryReason) ShouldHostFeast(Hero host, Kingdom kingdom)
+        {
+            var score = _feastScoringModel.GetFeastHostingScore(host);
+
+            var reasons = new List<(float weight, string reason)>();
+
+            if (HasRecentDiplomaticSuccess(kingdom))
+            {
+                score.Add(25f, new TextObject("Recent diplomatic success"));
+                reasons.Add((25f, "to celebrate recent diplomatic success"));
+            }
+
+            if (IsKingdomProperous(kingdom))
+            {
+                score.Add(20f, new TextObject("Kingdom prosperity"));
+                reasons.Add((20f, "to celebrate the kingdom's prosperity"));
+            }
+
+            if (HasLowMorale(kingdom))
+            {
+                score.Add(30f, new TextObject("Boost kingdom morale"));
+                reasons.Add((30f, "to boost morale in the realm"));
+            }
+
+            if (HasRecentCelebratoryEvent(host))
+            {
+                score.Add(35f, new TextObject("Recent celebratory event"));
+                reasons.Add((35f, "to celebrate recent joyous events"));
+            }
+
+            float seasonalBonus = GetSeasonalBonus();
+            if (seasonalBonus > 0)
+            {
+                score.Add(seasonalBonus, new TextObject("Favorable season"));
+                reasons.Add((seasonalBonus, "as the season is favorable for celebration"));
+            }
+
+            string primaryReason = reasons.OrderByDescending(r => r.weight).FirstOrDefault().reason ?? "to strengthen bonds among the nobility";
+
+            return (score.ResultNumber > 75f, primaryReason);
+        }
+
+        private float GetSeasonalBonus()
+        {
+            var currentSeason = CampaignTime.Now.GetSeasonOfYear; // Fixed: Removed parentheses to access the property instead of invoking it as a method.
+            switch (currentSeason)
+            {
+                case CampaignTime.Seasons.Autumn: return 15f;
+                case CampaignTime.Seasons.Winter: return 20f;
+                case CampaignTime.Seasons.Spring: return 5f;
+                case CampaignTime.Seasons.Summer: return 0f;
+                default: return 0f;
+            }
+        }
+
+        private float GetDiplomaticBonus(Hero host, Kingdom kingdom)
+        {
+            float bonus = 0f;
+
+            var recentAlliances = kingdom.GetAlliedKingdoms().Count();
+            if (recentAlliances > 0)
+            {
+                bonus += recentAlliances * 10f;
+            }
+
+            var neighborKingdoms = Kingdom.All.Where(k => k != kingdom && !k.IsEliminated);
+            var goodRelations = neighborKingdoms.Count(k => kingdom.GetRelation(k) > 0);
+            bonus += goodRelations * 5f;
+
+            return Math.Min(bonus, 25f);
+        }
+
+        private float GetStabilityBonus(Kingdom kingdom)
+        {
+            float stability = 0f;
+
+            var discontentLords = kingdom.Lords.Count(l => l.GetRelation(kingdom.Leader) < -10);
+            var totalLords = kingdom.Lords.Count();
+
+            if (totalLords > 0)
+            {
+                float loyaltyRatio = 1f - (discontentLords / (float)totalLords);
+                if (loyaltyRatio > 0.8f)
+                {
+                    stability += 15f;
+                }
+                else if (loyaltyRatio < 0.6f)
+                {
+                    stability -= 10f;
+                }
+            }
+
+            return stability;
+        }
+
+        private float GetCulturalBonus(Hero host)
+        {
+            float bonus = 0f;
+
+            switch (host.Culture.StringId.ToLower())
+            {
+                case "vlandia": bonus += 10f; break;
+                case "empire": bonus += 5f; break;
+                case "battania": bonus += 8f; break;
+                case "sturgia": bonus += 12f; break;
+                case "khuzait": bonus += 3f; break;
+                case "aserai": bonus += 6f; break;
+            }
+
+            return bonus;
+        }
+
+        private bool HasRecentDiplomaticSuccess(Kingdom kingdom)
+        {
+            return kingdom.GetAlliedKingdoms().Any() ||
+                   (!FactionManager.GetEnemyKingdoms(kingdom).Any() && timeSinceLastFeast.ContainsKey(kingdom));
+        }
+
+        private bool IsKingdomProperous(Kingdom kingdom)
+        {
+            var averageWealth = kingdom.Lords.Average(l => l.Gold);
+            var settlementCount = kingdom.Settlements.Count();
+
+            return averageWealth > 50000 && settlementCount >= 3;
+        }
+
+        private bool HasLowMorale(Kingdom kingdom)
+        {
+            var discontentLords = kingdom.Lords.Count(l => l.GetRelation(kingdom.Leader) < -5);
+            return discontentLords > kingdom.Lords.Count() * 0.3f;
+        }
+
+        private bool HasRecentCelebratoryEvent(Hero host)
+        {
+            return host.Children.Any(c => c.Age < 2f) ||
+                   (host.Spouse != null && host.GetRelation(host.Spouse) > 50);
+        }
+
         public float calculateFoodContribution(Hero hero) => hero.PartyBelongedTo?.Food * 0.8f ?? 0f;
+
         public bool canHaveFeast(Kingdom kingdom)
         {
-            if (timeSinceLastFeast.TryGetValue(kingdom, out double lastFeast) && (lastFeast + 6) >= CampaignTime.Now.ToDays) return false;
+            if (timeSinceLastFeast.TryGetValue(kingdom, out double lastFeast) && (lastFeast + 15) >= CampaignTime.Now.ToDays)
+                return false;
+
             timeSinceLastFeast.Remove(kingdom);
             return true;
         }
+
         public FeastObject createFeast(Hero host, Settlement s, Kingdom k, List<Hero> lords, float food)
         {
             host.ChangeHeroGold(-5000);
             return new FeastObject(s, k, lords, host, food);
         }
+
         public bool feastIsPresent(Kingdom kingdom) => Feasts.Any(f => f.kingdom == kingdom);
 
         public List<Hero> getAllClanMembersInKingdomWhoWantToJoin(Kingdom kingdom, Hero feastHost)
@@ -287,6 +450,7 @@ namespace TodayWeFeast
             campaignGameSystemStarter.AddGameMenuOption("castle", "manage_feast_inventory_castle", "Manage feast inventory", game_menu_manage_feast_on_condition, game_menu_manage_feast_consequence, false, 5, false);
             campaignGameSystemStarter.AddGameMenuOption("castle", "end_feast_castle", "End the feast", game_menu_end_feast_on_condition, game_menu_end_feast_consequence, false, 6, false);
         }
+
         private bool game_menu_host_feast_on_condition(MenuCallbackArgs args) { args.optionLeaveType = GameMenuOption.LeaveType.Leave; return !Feasts.Any(f => f.kingdom == Hero.MainHero.MapFaction); }
         private bool game_menu_manage_feast_on_condition(MenuCallbackArgs args) { args.optionLeaveType = GameMenuOption.LeaveType.Manage; return Feasts.Any(f => f.feastSettlement == Settlement.CurrentSettlement && f.hostOfFeast == Hero.MainHero); }
         private bool game_menu_end_feast_on_condition(MenuCallbackArgs args) { args.optionLeaveType = GameMenuOption.LeaveType.Leave; return Feasts.Any(f => f.feastSettlement == Settlement.CurrentSettlement && f.hostOfFeast == Hero.MainHero); }

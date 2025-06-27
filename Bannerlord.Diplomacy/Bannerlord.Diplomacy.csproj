@@ -89,5 +89,8 @@
             <Replacement>$(MCMVersion)</Replacement>
         </SubModuleOverrides>
     </ItemGroup>
+    <ItemGroup>
+      <Folder Include="War Peace AI Overhaul\Military\" />
+    </ItemGroup>
 
 </Project>

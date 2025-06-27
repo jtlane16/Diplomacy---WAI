@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
@@ -20,6 +21,8 @@ namespace TodayWeFeast
             this.feastSettlement = feastSettlementPar;
             this.kingdom = kingdomPar;
             this.lordsInFeast = lordsInFeastPar;
+            // Store the initial list of guests to compare against later.
+            this.initialLordsInFeast = new List<Hero>(lordsInFeastPar);
             this.hostOfFeast = hostOfFeast;
             this.sendAllLordsToFeast();
             this.createTournamentIfApplicable(feastSettlementPar);
@@ -70,16 +73,22 @@ namespace TodayWeFeast
             this.hostOfFeast.Clan.AddRenown(50, true);
             this.hostOfFeast.AddSkillXp(DefaultSkills.Steward, 1000);
 
-            foreach (Hero hero in this.lordsInFeast)
+            // FIX: Add a null check to prevent crashes when loading older saves.
+            // This handles saves from before initialLordsInFeast was added by falling back to lordsInFeast.
+            var guestsToReward = this.initialLordsInFeast ?? this.lordsInFeast;
+            if (guestsToReward != null)
             {
-                if (hero.PartyBelongedTo != null && hero != Hero.MainHero)
+                foreach (Hero hero in guestsToReward)
                 {
-                    hero.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
-                }
+                    if (hero.PartyBelongedTo != null && hero != Hero.MainHero)
+                    {
+                        hero.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+                    }
 
-                if (hero != this.hostOfFeast)
-                {
-                    ChangeRelationAction.ApplyRelationChangeBetweenHeroes(this.hostOfFeast, hero, 5, true);
+                    if (hero != this.hostOfFeast)
+                    {
+                        ChangeRelationAction.ApplyRelationChangeBetweenHeroes(this.hostOfFeast, hero, 5, true);
+                    }
                 }
             }
 
@@ -102,17 +111,75 @@ namespace TodayWeFeast
 
         public void dailyFeastTick()
         {
-            if (this.hostOfFeast != Hero.MainHero)
+            currentDay++; // A feast gets older each day.
+
+            // --- GUEST LEAVING LOGIC ---
+            // On each day of the feast, AI guests will re-evaluate if they want to stay.
+            var feastAttendingScoringModel = new FeastAttendingScoringModel();
+            var lordsToLeave = new List<Hero>();
+
+            if (lordsInFeast != null)
             {
                 foreach (Hero guest in this.lordsInFeast)
                 {
-                    if (guest != this.hostOfFeast && guest != Hero.MainHero)
+                    if (guest == this.hostOfFeast || guest == Hero.MainHero)
                     {
-                        ChangeRelationAction.ApplyRelationChangeBetweenHeroes(guest, this.hostOfFeast, 1, false);
+                        continue; // The host and the player don't use this logic.
+                    }
+
+                    // The score to attend will now be lower because the feast has gone on for longer.
+                    var attendingScore = feastAttendingScoringModel.GetFeastAttendingScore(guest, this);
+                    if (attendingScore.ResultNumber < 0) // A negative score means the lord wants to leave.
+                    {
+                        lordsToLeave.Add(guest);
                     }
                 }
             }
 
+
+            // Remove the lords who decided to leave.
+            foreach (var lord in lordsToLeave)
+            {
+                this.lordsInFeast.Remove(lord);
+                if (lord.PartyBelongedTo != null)
+                {
+                    // Re-enable their AI so they can go about their business.
+                    lord.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+                }
+                TextObject message = new TextObject("{=leaving_feast_message}{LORD_NAME} has left the feast at {SETTLEMENT_NAME}.");
+                message.SetTextVariable("LORD_NAME", lord.Name);
+                message.SetTextVariable("SETTLEMENT_NAME", this.feastSettlement.Name);
+                MBInformationManager.AddQuickInformation(message);
+            }
+
+            // --- HOST ENDING FEAST LOGIC ---
+            // The AI host will check if it's time to end the feast.
+            if (this.hostOfFeast != Hero.MainHero)
+            {
+                var feastEndingScoringModel = new FeastEndingScoringModel();
+                var endingScore = feastEndingScoringModel.GetFeastEndingScore(this);
+
+                // If the score to end the feast is high enough, the host ends it.
+                if (endingScore.ResultNumber >= 100f)
+                {
+                    this.endFeast();
+                    return; // Feast has ended, no more logic needed for this tick.
+                }
+
+                // Standard daily relation gain for guests that are still present.
+                if (lordsInFeast != null)
+                {
+                    foreach (Hero guest in this.lordsInFeast)
+                    {
+                        if (guest != this.hostOfFeast && guest != Hero.MainHero)
+                        {
+                            ChangeRelationAction.ApplyRelationChangeBetweenHeroes(guest, this.hostOfFeast, 1, false);
+                        }
+                    }
+                }
+            }
+
+            // If the feast runs out of food or hits its maximum duration, it ends.
             if (this.amountOfFood <= 0 || (CampaignTime.Now.ToDays > this.endFeastDay.ToDays))
             {
                 this.endFeast();
@@ -120,29 +187,41 @@ namespace TodayWeFeast
             }
             else
             {
-                foreach (Hero hero in this.lordsInFeast)
+                // Food consumption logic
+                if (lordsInFeast != null)
                 {
-                    if (this.amountOfFood <= 0 && this.hostOfFeast == Hero.MainHero && CampaignTime.Now.ToDays > playerTimeBeforeEnd.ToDays)
+                    foreach (Hero hero in this.lordsInFeast)
                     {
-                        this.endFeast();
-                        return;
-                    }
-                    else if (this.amountOfFood <= 0 && this.hostOfFeast != Hero.MainHero)
-                    {
-                        this.endFeast();
-                        return;
-                    }
-                    else if (hero.CurrentSettlement == this.feastSettlement)
-                    {
-                        try
+                        if (this.amountOfFood <= 0 && this.hostOfFeast == Hero.MainHero && CampaignTime.Now.ToDays > playerTimeBeforeEnd.ToDays)
                         {
-                            this.feastRoster.AddToCounts(this.feastRoster[1].EquipmentElement, -1);
-                            this.amountOfFood--;
+                            this.endFeast();
+                            return;
                         }
-                        catch
+                        else if (this.amountOfFood <= 0 && this.hostOfFeast != Hero.MainHero)
                         {
-                            this.feastRoster.AddToCounts(this.feastRoster[0].EquipmentElement, -1);
-                            this.amountOfFood--;
+                            this.endFeast();
+                            return;
+                        }
+                        else if (hero.CurrentSettlement == this.feastSettlement)
+                        {
+                            try
+                            {
+                                if (this.feastRoster.Count > 1)
+                                {
+                                    this.feastRoster.AddToCounts(this.feastRoster[1].EquipmentElement, -1);
+                                    this.amountOfFood--;
+                                }
+                                else if (this.feastRoster.Count > 0)
+                                {
+                                    this.feastRoster.AddToCounts(this.feastRoster[0].EquipmentElement, -1);
+                                    this.amountOfFood--;
+                                }
+
+                            }
+                            catch
+                            {
+                                // Could be empty, do nothing
+                            }
                         }
                     }
                 }
@@ -151,24 +230,24 @@ namespace TodayWeFeast
 
         public void makeAILordContributeToTheFeast(Hero hero, float foodToContribute)
         {
-            if (hero.PartyBelongedTo == null) return;
-            if (hero.PartyBelongedTo.ItemRoster == null) return;
+            if (hero.PartyBelongedTo == null || hero.PartyBelongedTo.ItemRoster == null) return;
 
             float count = 0f;
-            for (int i = 0; i < hero.PartyBelongedTo.ItemRoster.Count; i++)
+            ItemRoster roster = hero.PartyBelongedTo.ItemRoster;
+            for (int i = roster.Count - 1; i >= 0; i--)
             {
                 if (count > foodToContribute) break;
-                else if (!hero.PartyBelongedTo.ItemRoster[i].EquipmentElement.Item.IsFood) continue;
-                else
+
+                ItemObject item = roster[i].EquipmentElement.Item;
+                if (item == null || !item.IsFood) continue;
+
+                int amountToTake = Math.Min(roster[i].Amount, (int) (foodToContribute - count));
+
+                if (amountToTake > 0)
                 {
-                    var tempItemCount = 0;
-                    while (tempItemCount < hero.PartyBelongedTo.ItemRoster[i].Amount && count < foodToContribute)
-                    {
-                        tempItemCount++;
-                        this.feastRoster.AddToCounts(hero.PartyBelongedTo.ItemRoster[i].EquipmentElement, 1);
-                        hero.PartyBelongedTo.ItemRoster.AddToCounts(hero.PartyBelongedTo.ItemRoster[i].EquipmentElement, -1);
-                        count++;
-                    }
+                    this.feastRoster.AddToCounts(roster[i].EquipmentElement, amountToTake);
+                    roster.AddToCounts(roster[i].EquipmentElement, -amountToTake);
+                    count += amountToTake;
                 }
             }
             this.amountOfFood = count;
@@ -190,5 +269,9 @@ namespace TodayWeFeast
         public float amountOfFood;
         [SaveableField(17)]
         public ItemRoster feastRoster = new ItemRoster();
+        [SaveableField(19)]
+        public int currentDay = 0;
+        [SaveableField(20)]
+        public List<Hero> initialLordsInFeast;
     }
 }

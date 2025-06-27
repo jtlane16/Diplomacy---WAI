@@ -49,8 +49,7 @@ namespace WarAndAiTweaks
                 var campaignStarter = (CampaignGameStarter) gameStarter;
                 campaignStarter.AddBehavior(new StrategicAICampaignBehavior());
                 campaignStarter.AddBehavior(new DiplomaticAgreementManager());
-                campaignStarter.AddBehavior(new InfamyManager()); // Add this line
-                campaignStarter.AddBehavior(new ClanDefenseCampaignBehavior());
+                campaignStarter.AddBehavior(new InfamyManager());
                 campaignStarter.AddBehavior(FeastBehavior.Instance);
                 campaignStarter.AddBehavior(new SettlementCultureChangerBehavior());
                 AIComputationLogger.ClearLog();

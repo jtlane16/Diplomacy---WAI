@@ -21,25 +21,13 @@ namespace TodayWeFeast
                 "feast_host_greeting",
                 "start",
                 "feast_host_response",
-                "{=feast_host_greeting}{FEAST_HOST_MESSAGE}", // This line uses a variable
+                "{=feast_host_greeting}{FEAST_HOST_MESSAGE}", // Changed format
                 () => IsPlayerTalkingToFeastHost(),
                 () =>
                 {
-                    var host = Hero.OneToOneConversationHero;
-                    string message = GenerateHostMessage(host);
-
-                    // Debug the variable setting
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST DEBUG] Setting message: {message}", Colors.Magenta));
-
-                    // THIS IS THE KEY PART - set the variable BEFORE the dialog shows
-                    MBTextManager.SetTextVariable("FEAST_HOST_MESSAGE", message);
-
-                    // Apply bonuses - moved to here instead of HandleFeastHostConversation
-                    ChangeRelationAction.ApplyPlayerRelation(host, 4, true, true);
-                    Hero.MainHero.Clan.AddRenown(2, true);
-                    FeastBehavior.Instance._talkedToLordsToday.Add(host);
+                    HandleFeastHostConversation();
                 },
-                150,
+                150, // Very high priority
                 null);
 
             // Add a player response that closes the dialog
@@ -71,56 +59,31 @@ namespace TodayWeFeast
             {
                 // Check if we're in a feast location
                 var settlement = PlayerEncounter.LocationEncounter?.Settlement;
-                if (settlement == null) 
-                {
-                    InformationManager.DisplayMessage(new InformationMessage("[FEAST DEBUG] No settlement found", Colors.Red));
-                    return false;
-                }
+                if (settlement == null) return false;
 
                 // Find if there's a feast at this settlement
                 var currentFeast = FeastBehavior.Instance?.Feasts?.FirstOrDefault(f => f.feastSettlement == settlement);
-                if (currentFeast == null) 
-                {
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST DEBUG] No feast found at {settlement.Name}", Colors.Red));
-                    return false;
-                }
+                if (currentFeast == null) return false;
 
                 // Check if we're talking to the host
                 var conversationHero = Hero.OneToOneConversationHero;
-                if (conversationHero == null) 
-                {
-                    InformationManager.DisplayMessage(new InformationMessage("[FEAST DEBUG] No conversation hero", Colors.Red));
-                    return false;
-                }
-
-                if (conversationHero != currentFeast.hostOfFeast) 
-                {
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST DEBUG] Not talking to host. Talking to: {conversationHero.Name}, Host is: {currentFeast.hostOfFeast.Name}", Colors.Red));
-                    return false;
-                }
+                if (conversationHero == null || conversationHero != currentFeast.hostOfFeast) return false;
 
                 // Player must be a guest (not the host)
-                if (currentFeast.hostOfFeast == Hero.MainHero) 
-                {
-                    InformationManager.DisplayMessage(new InformationMessage("[FEAST DEBUG] Player is the host", Colors.Red));
-                    return false;
-                }
+                if (currentFeast.hostOfFeast == Hero.MainHero) return false;
 
                 // Player must be invited
-                if (!currentFeast.lordsInFeast.Contains(Hero.MainHero)) 
-                {
-                    InformationManager.DisplayMessage(new InformationMessage("[FEAST DEBUG] Player not invited to feast", Colors.Red));
-                    return false;
-                }
+                if (!currentFeast.lordsInFeast.Contains(Hero.MainHero)) return false;
 
                 // Only once per day
-                if (FeastBehavior.Instance._talkedToLordsToday.Contains(conversationHero)) 
+                if (FeastBehavior.Instance._talkedToLordsToday.Contains(conversationHero)) return false;
+
+                // Add debug output to help diagnose
+                if (Hero.OneToOneConversationHero != null)
                 {
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST DEBUG] Already talked to {conversationHero.Name} today", Colors.Red));
-                    return false;
+                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST DIALOG] Checking dialog for {Hero.OneToOneConversationHero.Name}", Colors.Magenta));
                 }
 
-                InformationManager.DisplayMessage(new InformationMessage($"[FEAST DEBUG] All conditions met for host dialog with {conversationHero.Name}", Colors.Green));
                 return true;
             }
             catch (Exception ex)
@@ -163,6 +126,34 @@ namespace TodayWeFeast
             }
         }
 
+        private static void HandleFeastHostConversation()
+        {
+            var host = Hero.OneToOneConversationHero;
+            string message = GenerateHostMessage(host);
+
+            // THIS IS THE KEY PART - set the variable BEFORE the dialog shows
+            MBTextManager.SetTextVariable("FEAST_HOST_MESSAGE", message);
+
+            // Check if we can give relation bonus (3-day cooldown)
+            if (FeastBehavior.Instance.CanTalkToLordForRelation(host))
+            {
+                // Apply bonuses - CHANGED from +1 to +2
+                ChangeRelationAction.ApplyPlayerRelation(host, 2, true, true);
+                Hero.MainHero.Clan.AddRenown(1, true);
+                FeastBehavior.Instance._lastTalkedToLords[host] = CampaignTime.Now; // Update last talked time
+
+                InformationManager.DisplayMessage(new InformationMessage($"Your conversation with {host.Name} strengthens your relationship! (+2 Relation, +1 Renown)", Colors.Green));
+            }
+            else
+            {
+                // Just renown, no relation bonus
+                Hero.MainHero.Clan.AddRenown(1, true);
+                InformationManager.DisplayMessage(new InformationMessage($"You enjoy the feast with {host.Name}. (+1 Renown)", Colors.Yellow));
+            }
+
+            FeastBehavior.Instance._talkedToLordsToday.Add(host); // Still mark as talked to today to prevent multiple conversations
+        }
+
         private static void HandleFeastGuestConversation()
         {
             var guest = Hero.OneToOneConversationHero;
@@ -170,14 +161,25 @@ namespace TodayWeFeast
 
             MBTextManager.SetTextVariable("FEAST_GUEST_MESSAGE", message);
 
-            // Apply bonuses
-            ChangeRelationAction.ApplyPlayerRelation(guest, 3, true, true);
-            Hero.MainHero.Clan.AddRenown(1, true);
+            // Check if we can give relation bonus (3-day cooldown)
+            if (FeastBehavior.Instance.CanTalkToLordForRelation(guest))
+            {
+                // Apply bonuses - CHANGED from +1 to +2
+                ChangeRelationAction.ApplyPlayerRelation(guest, 2, true, true);
+                Hero.MainHero.Clan.AddRenown(1, true);
+                FeastBehavior.Instance._lastTalkedToLords[guest] = CampaignTime.Now; // Update last talked time
+
+                InformationManager.DisplayMessage(new InformationMessage($"{guest.Name} enjoys your feast! (+2 Relation, +1 Renown)", Colors.Green));
+            }
+            else
+            {
+                // Just renown, no relation bonus
+                Hero.MainHero.Clan.AddRenown(1, true);
+                InformationManager.DisplayMessage(new InformationMessage($"{guest.Name} enjoys your feast! (+1 Renown)", Colors.Yellow));
+            }
 
             // Mark as talked to
             FeastBehavior.Instance._talkedToLordsToday.Add(guest);
-
-            InformationManager.DisplayMessage(new InformationMessage($"{guest.Name} enjoys your feast! (+3 Relation, +1 Renown)", Colors.Green));
         }
 
         private static string GenerateHostMessage(Hero host)

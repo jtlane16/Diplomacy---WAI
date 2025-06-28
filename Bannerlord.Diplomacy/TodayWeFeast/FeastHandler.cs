@@ -42,6 +42,9 @@ namespace TodayWeFeast
         [SaveableField(3)]
         public List<Hero> _talkedToLordsToday;
 
+        [SaveableField(4)] // Add new field for tracking 3-day cooldowns
+        public Dictionary<Hero, CampaignTime> _lastTalkedToLords;
+
         [SaveableField(2)]
         public Dictionary<Kingdom, double> timeSinceLastFeast;
 
@@ -53,15 +56,14 @@ namespace TodayWeFeast
             this.Feasts = new List<FeastObject>();
             this.timeSinceLastFeast = new Dictionary<Kingdom, double>();
             this._talkedToLordsToday = new List<Hero>();
+            this._lastTalkedToLords = new Dictionary<Hero, CampaignTime>(); // Initialize new field
 
-            // NEW: Log that the feast system is loading
-            InformationManager.DisplayMessage(new InformationMessage("Feast system initialized!", Colors.Green));
+            // InformationManager.DisplayMessage(new InformationMessage("Feast system initialized!", Colors.Green));
         }
 
         public override void RegisterEvents()
         {
-            // NEW: Log event registration
-            InformationManager.DisplayMessage(new InformationMessage("Registering feast events...", Colors.Blue));
+            // InformationManager.DisplayMessage(new InformationMessage("Registering feast events...", Colors.Blue));
 
             CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
             CampaignEvents.AfterSettlementEntered.AddNonSerializedListener(this, new Action<MobileParty, Settlement, Hero>(OnAfterSettlementEntered));
@@ -74,13 +76,10 @@ namespace TodayWeFeast
             CampaignEvents.OnMissionEndedEvent.AddNonSerializedListener(this, new Action<IMission>(OnMissionEnded));
             CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, new Action<CampaignGameStarter>(RegisterFeastDialogs));
 
-            // NEW: Add conversation started event to handle feast interactions immediately
             CampaignEvents.ConversationEnded.AddNonSerializedListener(this, new Action<IEnumerable<CharacterObject>>(OnConversationEnded));
             CampaignEvents.OnAgentJoinedConversationEvent.AddNonSerializedListener(this, new Action<IAgent>(OnAgentJoinedConversation));
 
-
-            // NEW: Log successful registration
-            InformationManager.DisplayMessage(new InformationMessage("Feast events registered successfully!", Colors.Green));
+            // InformationManager.DisplayMessage(new InformationMessage("Feast events registered successfully!", Colors.Green));
         }
 
         public override void SyncData(IDataStore dataStore)
@@ -88,12 +87,13 @@ namespace TodayWeFeast
             dataStore.SyncData("Feasts", ref Feasts);
             dataStore.SyncData("timeSinceLastFeast", ref timeSinceLastFeast);
             dataStore.SyncData("talkedToLordsToday", ref _talkedToLordsToday);
+            dataStore.SyncData("lastTalkedToLords", ref _lastTalkedToLords); // Add new field to save data
         }
 
         private void RegisterFeastDialogs(CampaignGameStarter campaignGameStarter)
         {
             FeastConversations.AddFeastDialogs(campaignGameStarter);
-            InformationManager.DisplayMessage(new InformationMessage("Feast dialogues registered successfully!", Colors.Green));
+            // InformationManager.DisplayMessage(new InformationMessage("Feast dialogues registered successfully!", Colors.Green));
         }
 
         private void OnAgentJoinedConversation(IAgent agent)
@@ -111,8 +111,7 @@ namespace TodayWeFeast
             Settlement settlement = PlayerEncounter.LocationEncounter?.Settlement;
             Hero talkedToHero = character.HeroObject;
 
-            // Debug info to help diagnose the issue
-            InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Starting conversation with {talkedToHero.Name} at {settlement?.Name?.ToString() ?? "null"}", Colors.Yellow));
+            // InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Starting conversation with {talkedToHero.Name} at {settlement?.Name?.ToString() ?? "null"}", Colors.Yellow));
 
             if (location.StringId.Equals("lordshall", StringComparison.OrdinalIgnoreCase) && settlement != null)
             {
@@ -120,14 +119,13 @@ namespace TodayWeFeast
 
                 if (currentFeast != null)
                 {
-                    // Debug feast info
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Found feast hosted by {currentFeast.hostOfFeast.Name}", Colors.Yellow));
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Player invited? {currentFeast.lordsInFeast.Contains(Hero.MainHero)}", Colors.Yellow));
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Talked already? {_talkedToLordsToday.Contains(talkedToHero)}", Colors.Yellow));
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Matching host? {currentFeast.hostOfFeast == talkedToHero}", Colors.Yellow));
+                    // InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Found feast hosted by {currentFeast.hostOfFeast.Name}", Colors.Yellow));
+                    // InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Player invited? {currentFeast.lordsInFeast.Contains(Hero.MainHero)}", Colors.Yellow));
+                    // InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Talked already? {_talkedToLordsToday.Contains(talkedToHero)}", Colors.Yellow));
+                    // InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Matching host? {currentFeast.hostOfFeast == talkedToHero}", Colors.Yellow));
                 }
 
-                if (currentFeast != null && !_talkedToLordsToday.Contains(talkedToHero))
+                if (currentFeast != null && CanTalkToLordForRelation(talkedToHero))
                 {
                     // ONLY handle cases that DON'T have proper dialog lines
                     // Let the dialog system handle host/guest conversations
@@ -138,14 +136,26 @@ namespace TodayWeFeast
                         talkedToHero != Hero.MainHero &&
                         currentFeast.hostOfFeast != Hero.MainHero)
                     {
-                        ChangeRelationAction.ApplyPlayerRelation(talkedToHero, 1, true, true);
-                        _talkedToLordsToday.Add(talkedToHero);
-                        InformationManager.DisplayMessage(new InformationMessage($"You share pleasant conversation with {talkedToHero.Name} at the feast. (+1 Relation)", Colors.Green));
+                        ChangeRelationAction.ApplyPlayerRelation(talkedToHero, 2, true, true); // Changed from 1 to 2
+                        _lastTalkedToLords[talkedToHero] = CampaignTime.Now; // Update last talked time
+                        InformationManager.DisplayMessage(new InformationMessage($"You share pleasant conversation with {talkedToHero.Name} at the feast. (+2 Relation)", Colors.Green));
                     }
 
                     // Note: Removed the host and guest conversation handling - let the dialog system handle those
                 }
             }
+        }
+
+        // Add this public method so FeastConversations can access it
+        public bool CanTalkToLordForRelation(Hero hero)
+        {
+            if (!_lastTalkedToLords.ContainsKey(hero))
+            {
+                return true; // Never talked to them before
+            }
+
+            var daysSinceLastTalk = CampaignTime.Now.ToDays - _lastTalkedToLords[hero].ToDays;
+            return daysSinceLastTalk >= 3; // Can only get relation bonus every 3 days
         }
 
         private void OnConversationEnded(IEnumerable<CharacterObject> characters)
@@ -187,6 +197,42 @@ namespace TodayWeFeast
             else
             {
                 return $"{guest.Name}: \"I... appreciate your invitation, {Hero.MainHero.Name}. Your hospitality is noted.\"";
+            }
+        }
+
+        private static string GenerateReturnHostMessage(Hero host)
+        {
+            var relation = host.GetRelation(Hero.MainHero);
+
+            if (relation >= 20)
+            {
+                return $"Ah, {Hero.MainHero.Name}! Thanks for coming back to chat! Your company makes this feast even more delightful.";
+            }
+            else if (relation >= 0)
+            {
+                return $"Welcome back, {Hero.MainHero.Name}. I'm glad you're enjoying the festivities enough to return!";
+            }
+            else
+            {
+                return $"You've returned, {Hero.MainHero.Name}. Perhaps we can continue to... build understanding between us.";
+            }
+        }
+
+        private static string GenerateReturnGuestMessage(Hero guest)
+        {
+            var relation = guest.GetRelation(Hero.MainHero);
+
+            if (relation >= 20)
+            {
+                return $"My dear {Hero.MainHero.Name}! I simply had to thank you again for this wonderful feast! Your hospitality knows no bounds!";
+            }
+            else if (relation >= 0)
+            {
+                return $"Thank you again, {Hero.MainHero.Name}. I wanted to express once more how much I'm enjoying your celebration.";
+            }
+            else
+            {
+                return $"I... wanted to speak with you again, {Hero.MainHero.Name}. This feast is helping me see you in a different light.";
             }
         }
 
@@ -277,7 +323,7 @@ namespace TodayWeFeast
 
         private void OnAfterSettlementEntered(MobileParty party, Settlement settlement, Hero hero)
         {
-            foreach (FeastObject feast in Feasts)
+            foreach (FeastObject feast in Feasts.ToList())
             {
                 if (feast.lordsInFeast.Contains(hero) && settlement == feast.feastSettlement && hero.PartyBelongedTo != null && hero != Hero.MainHero)
                 {
@@ -289,15 +335,14 @@ namespace TodayWeFeast
 
         private void OnGameLoaded(CampaignGameStarter gameStarterObject)
         {
-            // NEW: Log game loading
-            InformationManager.DisplayMessage(new InformationMessage("Feast system: Game loaded", Colors.Yellow));
+            // InformationManager.DisplayMessage(new InformationMessage("Feast system: Game loaded", Colors.Yellow));
 
             if (Feasts == null) Feasts = new List<FeastObject>();
             if (timeSinceLastFeast == null) timeSinceLastFeast = new Dictionary<Kingdom, double>();
             if (_talkedToLordsToday == null) _talkedToLordsToday = new List<Hero>();
+            if (_lastTalkedToLords == null) _lastTalkedToLords = new Dictionary<Hero, CampaignTime>(); // Initialize if null
 
-            // NEW: Log current state
-            InformationManager.DisplayMessage(new InformationMessage($"Feast system: {Feasts.Count} active feasts loaded", Colors.Yellow));
+            // InformationManager.DisplayMessage(new InformationMessage($"Feast system: {Feasts.Count} active feasts loaded", Colors.Yellow));
         }
 
         private void OnWarDeclared(IFaction faction1, IFaction faction2, DeclareWarAction.DeclareWarDetail detail)
@@ -310,21 +355,19 @@ namespace TodayWeFeast
 
         private void OnDailyTick()
         {
-            // NEW: Add periodic logging to verify the system is running
-            int dayCounter = 0;
-            dayCounter++;
+            // int dayCounter = 0;
+            // dayCounter++;
 
-            if (dayCounter % 10 == 0) // Log every 10 days
-            {
-                InformationManager.DisplayMessage(new InformationMessage($"Feast system: Daily tick {dayCounter}, {Feasts.Count} active feasts", Colors.Cyan));
-            }
+            // if (dayCounter % 10 == 0) // Log every 10 days
+            // {
+            //     InformationManager.DisplayMessage(new InformationMessage($"Feast system: Daily tick {dayCounter}, {Feasts.Count} active feasts", Colors.Cyan));
+            // }
 
             _talkedToLordsToday.Clear();
             foreach (FeastObject f in Feasts.ToList()) 
             {
                 f.dailyFeastTick();
                 
-                // NEW: Process AI feast attendance
                 ProcessFeastAttendanceAI(f);
             }
 
@@ -336,8 +379,7 @@ namespace TodayWeFeast
                 Hero bestHost = SelectBestFeastHost(kingdom);
                 if (bestHost != null)
                 {
-                    // NEW: Log feast creation attempts
-                    InformationManager.DisplayMessage(new InformationMessage($"Feast system: {bestHost.Name} considering hosting a feast", Colors.Cyan));
+                    // InformationManager.DisplayMessage(new InformationMessage($"Feast system: {bestHost.Name} considering hosting a feast", Colors.Cyan));
 
                     var hostingDecision = ShouldHostFeast(bestHost, kingdom);
                     if (hostingDecision.shouldHost)
@@ -350,17 +392,15 @@ namespace TodayWeFeast
                             string reasonText = hostingDecision.primaryReason;
                             InformationManager.DisplayMessage(new InformationMessage($"{bestHost.Name} is hosting a feast at {bestHost.HomeSettlement.Name} {reasonText}!"));
                         }
-                        else
-                        {
-                            // NEW: Log why feast wasn't created
-                            InformationManager.DisplayMessage(new InformationMessage($"Feast system: {bestHost.Name} wanted to host but insufficient food ({foodContribution:F1})", Colors.Red));
-                        }
+                        // else
+                        // {
+                        //     InformationManager.DisplayMessage(new InformationMessage($"Feast system: {bestHost.Name} wanted to host but insufficient food ({foodContribution:F1})", Colors.Red));
+                        // }
                     }
-                    else
-                    {
-                        // NEW: Log why feast wasn't created
-                        InformationManager.DisplayMessage(new InformationMessage($"Feast system: {bestHost.Name} decided not to host (score too low)", Colors.Red));
-                    }
+                    // else
+                    // {
+                    //     InformationManager.DisplayMessage(new InformationMessage($"Feast system: {bestHost.Name} decided not to host (score too low)", Colors.Red));
+                    // }
                 }
             }
         }
@@ -381,7 +421,7 @@ namespace TodayWeFeast
                 {
                     // Force the host back to the feast
                     hostParty.Ai.SetMoveGoToSettlement(feast.feastSettlement);
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Host {feast.hostOfFeast.Name} ordered to return to {feast.feastSettlement.Name}", Colors.Red));
+                    // InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Host {feast.hostOfFeast.Name} ordered to return to {feast.feastSettlement.Name}", Colors.Red));
                 }
             }
 
@@ -408,13 +448,15 @@ namespace TodayWeFeast
                         party.Ai.SetMoveGoToSettlement(feast.feastSettlement);
                         
                         // Log the decision
-                        AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_TRAVEL_INITIATED,{feast.kingdom.StringId},{invitedLord.Name},{feast.feastSettlement.Name},{attendanceScore.ResultNumber:F2}");
+                        // AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_TRAVEL_INITIATED,{feast.kingdom.StringId},{invitedLord.Name},{feast.feastSettlement.Name},{attendanceScore.ResultNumber:F2}");
                     }
                     else if (attendanceScore.ResultNumber < -50f)
                     {
-                        // They don't want to attend - remove them from the feast
+                        // They don't want to attend - remove them from the feast AND re-enable their AI
                         feast.lordsInFeast.Remove(invitedLord);
-                        AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_DECLINED,{feast.kingdom.StringId},{invitedLord.Name},{attendanceScore.ResultNumber:F2}");
+                        party.Ai.SetDoNotMakeNewDecisions(false); // IMPORTANT: Re-enable AI for declining lords
+                        // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for declining lord {invitedLord.Name}", Colors.Orange));
+                        // AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_DECLINED,{feast.kingdom.StringId},{invitedLord.Name},{attendanceScore.ResultNumber:F2}");
                     }
                 }
                 else
@@ -422,6 +464,21 @@ namespace TodayWeFeast
                     // They're already at the feast - keep them there
                     party.Ai.SetDoNotMakeNewDecisions(true);
                 }
+            }
+
+            // Remove the lords who decided to leave.
+            foreach (var lord in feast.lordsInFeast.ToList())
+            {
+                if (lord.PartyBelongedTo != null)
+                {
+                    // IMPORTANT: Re-enable their AI so they can go about their business.
+                    lord.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+                    // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for departing lord {lord.Name}", Colors.Orange));
+                }
+                // TextObject message = new TextObject("{=leaving_feast_message}{LORD_NAME} has left the feast at {SETTLEMENT_NAME}.");
+                // message.SetTextVariable("LORD_NAME", lord.Name);
+                // message.SetTextVariable("SETTLEMENT_NAME", feast.feastSettlement.Name);
+                // MBInformationManager.AddQuickInformation(message);
             }
         }
 
@@ -632,20 +689,18 @@ namespace TodayWeFeast
                 }
             }
 
-            // DEBUG: Log invitation results
-            InformationManager.DisplayMessage(new InformationMessage($"Debug: Invited {partyHeros.Count} lords to feast", Colors.Yellow));
-            foreach (var lord in partyHeros)
-            {
-                InformationManager.DisplayMessage(new InformationMessage($"  - {lord.Name}", Colors.Yellow));
-            }
+            // InformationManager.DisplayMessage(new InformationMessage($"Debug: Invited {partyHeros.Count} lords to feast", Colors.Yellow));
+            // foreach (var lord in partyHeros)
+            // {
+            //     InformationManager.DisplayMessage(new InformationMessage($"  - {lord.Name}", Colors.Yellow));
+            // }
 
             return partyHeros;
         }
 
         public void MenuItems(CampaignGameStarter campaignGameSystemStarter)
         {
-            // NEW: Log menu registration
-            InformationManager.DisplayMessage(new InformationMessage("Registering feast menu items...", Colors.Yellow));
+            // InformationManager.DisplayMessage(new InformationMessage("Registering feast menu items...", Colors.Yellow));
 
             campaignGameSystemStarter.AddGameMenuOption("town_keep", "host_a_feast_town", "Host a feast (Cost: 5000 Gold)", game_menu_host_feast_on_condition, game_menu_host_feast_consequence, false, 4, false);
             campaignGameSystemStarter.AddGameMenuOption("town_keep", "manage_feast_inventory_town", "Manage feast inventory", game_menu_manage_feast_on_condition, game_menu_manage_feast_consequence, false, 5, false);
@@ -654,8 +709,7 @@ namespace TodayWeFeast
             campaignGameSystemStarter.AddGameMenuOption("castle", "manage_feast_inventory_castle", "Manage feast inventory", game_menu_manage_feast_on_condition, game_menu_manage_feast_consequence, false, 5, false);
             campaignGameSystemStarter.AddGameMenuOption("castle", "end_feast_castle", "End the feast", game_menu_end_feast_on_condition, game_menu_end_feast_consequence, false, 6, false);
 
-            // NEW: Log successful menu registration
-            InformationManager.DisplayMessage(new InformationMessage("Feast menu items registered successfully!", Colors.Green));
+            // InformationManager.DisplayMessage(new InformationMessage("Feast menu items registered successfully!", Colors.Green));
         }
 
         private bool game_menu_host_feast_on_condition(MenuCallbackArgs args)
@@ -667,30 +721,29 @@ namespace TodayWeFeast
             bool hasKingdom = Hero.MainHero.MapFaction is Kingdom;
             bool isOwner = Hero.MainHero.CurrentSettlement?.Owner == Hero.MainHero;
 
-            // NEW: More detailed debugging - Fixed type mismatches
-            InformationManager.DisplayMessage(new InformationMessage($"Debug Feast Menu Check:", Colors.Blue));
-            InformationManager.DisplayMessage(new InformationMessage($"  - Player Faction: {Hero.MainHero.MapFaction?.Name?.ToString() ?? "null"}", Colors.Blue));
-            InformationManager.DisplayMessage(new InformationMessage($"  - Is Kingdom: {hasKingdom}", Colors.Blue));
-            InformationManager.DisplayMessage(new InformationMessage($"  - Current Settlement: {Hero.MainHero.CurrentSettlement?.Name?.ToString() ?? "null"}", Colors.Blue));
-            InformationManager.DisplayMessage(new InformationMessage($"  - Settlement Owner: {Hero.MainHero.CurrentSettlement?.Owner?.Name?.ToString() ?? "null"}", Colors.Blue));
-            InformationManager.DisplayMessage(new InformationMessage($"  - Is Owner: {isOwner}", Colors.Blue));
-            InformationManager.DisplayMessage(new InformationMessage($"  - Total Feasts: {Feasts.Count}", Colors.Blue));
-            InformationManager.DisplayMessage(new InformationMessage($"  - No Active Feast: {hasNoActiveFeast}", Colors.Blue));
+            // Commented out debug messages
+            // InformationManager.DisplayMessage(new InformationMessage($"Debug Feast Menu Check:", Colors.Blue));
+            // InformationManager.DisplayMessage(new InformationMessage($"  - Player Faction: {Hero.MainHero.MapFaction?.Name?.ToString() ?? "null"}", Colors.Blue));
+            // InformationManager.DisplayMessage(new InformationMessage($"  - Is Kingdom: {hasKingdom}", Colors.Blue));
+            // InformationManager.DisplayMessage(new InformationMessage($"  - Current Settlement: {Hero.MainHero.CurrentSettlement?.Name?.ToString() ?? "null"}", Colors.Blue));
+            // InformationManager.DisplayMessage(new InformationMessage($"  - Settlement Owner: {Hero.MainHero.CurrentSettlement?.Owner?.Name?.ToString() ?? "null"}", Colors.Blue));
+            // InformationManager.DisplayMessage(new InformationMessage($"  - Is Owner: {isOwner}", Colors.Blue));
+            // InformationManager.DisplayMessage(new InformationMessage($"  - Total Feasts: {Feasts.Count}", Colors.Blue));
+            // InformationManager.DisplayMessage(new InformationMessage($"  - No Active Feast: {hasNoActiveFeast}", Colors.Blue));
 
-            // Add debug message to see what's happening
-            if (!hasNoActiveFeast)
-            {
-                var activeFeast = Feasts.First(f => f.kingdom == Hero.MainHero.MapFaction);
-                InformationManager.DisplayMessage(new InformationMessage($"Debug: Active feast exists for {Hero.MainHero.MapFaction?.Name?.ToString() ?? "null"} at {activeFeast.feastSettlement?.Name?.ToString() ?? "null"}, hosted by {activeFeast.hostOfFeast?.Name?.ToString() ?? "null"}", Colors.Red));
-            }
-            if (!hasKingdom)
-            {
-                InformationManager.DisplayMessage(new InformationMessage("Debug: Player not in kingdom", Colors.Red));
-            }
-            if (!isOwner)
-            {
-                InformationManager.DisplayMessage(new InformationMessage($"Debug: Not settlement owner. Current: {Hero.MainHero.CurrentSettlement?.Name?.ToString() ?? "null"}, Owner: {Hero.MainHero.CurrentSettlement?.Owner?.Name?.ToString() ?? "null"}", Colors.Red));
-            }
+            // if (!hasNoActiveFeast)
+            // {
+            //     var activeFeast = Feasts.First(f => f.kingdom == Hero.MainHero.MapFaction);
+            //     InformationManager.DisplayMessage(new InformationMessage($"Debug: Active feast exists for {Hero.MainHero.MapFaction?.Name?.ToString() ?? "null"} at {activeFeast.feastSettlement?.Name?.ToString() ?? "null"}, hosted by {activeFeast.hostOfFeast?.Name?.ToString() ?? "null"}", Colors.Red));
+            // }
+            // if (!hasKingdom)
+            // {
+            //     InformationManager.DisplayMessage(new InformationMessage("Debug: Player not in kingdom", Colors.Red));
+            // }
+            // if (!isOwner)
+            // {
+            //     InformationManager.DisplayMessage(new InformationMessage($"Debug: Not settlement owner. Current: {Hero.MainHero.CurrentSettlement?.Name?.ToString() ?? "null"}, Owner: {Hero.MainHero.CurrentSettlement?.Owner?.Name?.ToString() ?? "null"}", Colors.Red));
+            // }
 
             return hasNoActiveFeast && hasKingdom && isOwner;
         }

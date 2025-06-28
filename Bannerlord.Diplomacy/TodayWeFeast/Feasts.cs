@@ -89,25 +89,43 @@ namespace TodayWeFeast
         {
             InformationManager.DisplayMessage(new InformationMessage($"The feast at {this.feastSettlement.Name} has ended.", Colors.Green));
 
-            this.hostOfFeast.Clan.AddRenown(50, true);
-            this.hostOfFeast.AddSkillXp(DefaultSkills.Steward, 1000);
+            this.hostOfFeast.Clan.AddRenown(10, true); // REDUCED from 50 to 10
+            this.hostOfFeast.AddSkillXp(DefaultSkills.Steward, 500); // REDUCED from 1000 to 500
 
-            // FIX: Add a null check to prevent crashes when loading older saves.
-            // This handles saves from before initialLordsInFeast was added by falling back to lordsInFeast.
-            var guestsToReward = this.initialLordsInFeast ?? this.lordsInFeast;
-            if (guestsToReward != null)
+            // Create a comprehensive list of ALL heroes who might have been affected by this feast
+            var allAffectedHeroes = new HashSet<Hero>();
+            
+            // Add all heroes from both lists (handles saves from before initialLordsInFeast was added)
+            if (this.initialLordsInFeast != null)
             {
-                foreach (Hero hero in guestsToReward)
+                foreach (var hero in this.initialLordsInFeast)
                 {
-                    if (hero.PartyBelongedTo != null && hero != Hero.MainHero)
-                    {
-                        hero.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
-                    }
+                    allAffectedHeroes.Add(hero);
+                }
+            }
+            
+            if (this.lordsInFeast != null)
+            {
+                foreach (var hero in this.lordsInFeast)
+                {
+                    allAffectedHeroes.Add(hero);
+                }
+            }
 
-                    if (hero != this.hostOfFeast)
-                    {
-                        ChangeRelationAction.ApplyRelationChangeBetweenHeroes(this.hostOfFeast, hero, 5, true);
-                    }
+            // Re-enable AI for ALL affected heroes
+            foreach (Hero hero in allAffectedHeroes)
+            {
+                // IMPORTANT: Re-enable ALL hero AI when feast ends (except player)
+                if (hero != Hero.MainHero && hero.PartyBelongedTo != null)
+                {
+                    hero.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+                    // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for {hero.Name}", Colors.Yellow));
+                }
+
+                // Apply relation bonuses only to original guests (not the host)
+                if (hero != this.hostOfFeast && this.initialLordsInFeast?.Contains(hero) == true)
+                {
+                    ChangeRelationAction.ApplyRelationChangeBetweenHeroes(this.hostOfFeast, hero, 1, true); // REDUCED from 5 to 1
                 }
             }
 
@@ -115,6 +133,7 @@ namespace TodayWeFeast
             if (this.hostOfFeast != Hero.MainHero && this.hostOfFeast.PartyBelongedTo != null)
             {
                 this.hostOfFeast.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+                // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for host {this.hostOfFeast.Name}", Colors.Yellow));
             }
 
             if (this.feastSettlement.IsTown)
@@ -127,6 +146,7 @@ namespace TodayWeFeast
                     tournamentManager.ResolveTournament(tournamentGame, town);
                 }
             }
+            
             FeastBehavior.Instance.Feasts.Remove(this);
             if (!FeastBehavior.Instance.timeSinceLastFeast.ContainsKey(this.kingdom))
             {
@@ -147,7 +167,7 @@ namespace TodayWeFeast
             {
                 if (this.hostOfFeast.CurrentSettlement != this.feastSettlement)
                 {
-                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Enforcing host {this.hostOfFeast.Name} return to {this.feastSettlement.Name}", Colors.Red));
+                    // InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Enforcing host {this.hostOfFeast.Name} return to {this.feastSettlement.Name}", Colors.Red));
 
                     // Lock AI decisions and force travel
                     this.hostOfFeast.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(true);
@@ -168,6 +188,21 @@ namespace TodayWeFeast
                 }
             }
 
+            // Check if any guests want to leave
+            if (this.lordsInFeast != null)
+            {
+                foreach (Hero guest in this.lordsInFeast.ToList())
+                {
+                    if (guest == this.hostOfFeast || guest == Hero.MainHero)
+                        continue; // Skip host and player
+
+                    // Simple leaving logic - some chance to leave each day after day 3
+                    if (this.currentDay > 3 && MBRandom.RandomFloat < 0.2f) // 20% chance to leave after day 3
+                    {
+                        lordsToLeave.Add(guest);
+                    }
+                }
+            }
 
             // Remove the lords who decided to leave.
             foreach (var lord in lordsToLeave)
@@ -175,8 +210,9 @@ namespace TodayWeFeast
                 this.lordsInFeast.Remove(lord);
                 if (lord.PartyBelongedTo != null)
                 {
-                    // Re-enable their AI so they can go about their business.
+                    // IMPORTANT: Re-enable their AI so they can go about their business.
                     lord.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+                    // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for departing lord {lord.Name}", Colors.Orange));
                 }
                 TextObject message = new TextObject("{=leaving_feast_message}{LORD_NAME} has left the feast at {SETTLEMENT_NAME}.");
                 message.SetTextVariable("LORD_NAME", lord.Name);
@@ -205,7 +241,7 @@ namespace TodayWeFeast
                     {
                         if (guest != this.hostOfFeast && guest != Hero.MainHero)
                         {
-                            ChangeRelationAction.ApplyRelationChangeBetweenHeroes(guest, this.hostOfFeast, 1, false);
+                            ChangeRelationAction.ApplyRelationChangeBetweenHeroes(guest, this.hostOfFeast, 1, false); // ALREADY +1, no change needed
                         }
                     }
                 }

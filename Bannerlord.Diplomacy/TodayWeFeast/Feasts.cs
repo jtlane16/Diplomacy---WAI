@@ -64,6 +64,25 @@ namespace TodayWeFeast
                 message.SetTextVariable("HOST_NAME", this.hostOfFeast.Name);
                 MBInformationManager.AddQuickInformation(message);
             }
+
+            // Actually make AI lords travel to the feast
+            foreach (var invitedLord in this.lordsInFeast)
+            {
+                if (invitedLord != Hero.MainHero && invitedLord.PartyBelongedTo != null)
+                {
+                    var party = invitedLord.PartyBelongedTo;
+
+                    // If they're not already at the settlement, make them travel there
+                    if (invitedLord.CurrentSettlement != this.feastSettlement)
+                    {
+                        party.Ai.SetMoveGoToSettlement(this.feastSettlement);
+                    }
+
+                    // For both HOST and GUESTS: Disable other AI decisions to ensure they stay at the feast.
+                    // The host is now forced to travel if not present, and their AI is locked.
+                    party.Ai.SetDoNotMakeNewDecisions(true);
+                }
+            }
         }
 
         public void endFeast()
@@ -92,6 +111,12 @@ namespace TodayWeFeast
                 }
             }
 
+            // IMPORTANT: Always re-enable the host's AI when the feast ends
+            if (this.hostOfFeast != Hero.MainHero && this.hostOfFeast.PartyBelongedTo != null)
+            {
+                this.hostOfFeast.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+            }
+
             if (this.feastSettlement.IsTown)
             {
                 Town town = this.feastSettlement.Town;
@@ -118,21 +143,28 @@ namespace TodayWeFeast
             var feastAttendingScoringModel = new FeastAttendingScoringModel();
             var lordsToLeave = new List<Hero>();
 
-            if (lordsInFeast != null)
+            if (this.hostOfFeast != Hero.MainHero && this.hostOfFeast.PartyBelongedTo != null)
             {
-                foreach (Hero guest in this.lordsInFeast)
+                if (this.hostOfFeast.CurrentSettlement != this.feastSettlement)
                 {
-                    if (guest == this.hostOfFeast || guest == Hero.MainHero)
-                    {
-                        continue; // The host and the player don't use this logic.
-                    }
+                    InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Enforcing host {this.hostOfFeast.Name} return to {this.feastSettlement.Name}", Colors.Red));
 
-                    // The score to attend will now be lower because the feast has gone on for longer.
-                    var attendingScore = feastAttendingScoringModel.GetFeastAttendingScore(guest, this);
-                    if (attendingScore.ResultNumber < 0) // A negative score means the lord wants to leave.
+                    // Lock AI decisions and force travel
+                    this.hostOfFeast.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(true);
+
+                    // If the host has somehow wandered away, force them back to the feast
+                    this.hostOfFeast.PartyBelongedTo.Ai.SetMoveGoToSettlement(this.feastSettlement);
+
+                    // For extreme cases, just teleport them back
+                    if (MBRandom.RandomFloat < 0.5f) // 50% chance each day to just teleport back if they left
                     {
-                        lordsToLeave.Add(guest);
+                        TeleportHeroAction.ApplyImmediateTeleportToSettlement(this.hostOfFeast, this.feastSettlement);
                     }
+                }
+                else
+                {
+                    // They're at the feast location, make super sure their AI stays locked
+                    this.hostOfFeast.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(true);
                 }
             }
 

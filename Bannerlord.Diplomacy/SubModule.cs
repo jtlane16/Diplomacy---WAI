@@ -50,7 +50,7 @@ namespace WarAndAiTweaks
                 campaignStarter.AddBehavior(new StrategicAICampaignBehavior());
                 campaignStarter.AddBehavior(new DiplomaticAgreementManager());
                 campaignStarter.AddBehavior(new InfamyManager());
-                campaignStarter.AddBehavior(FeastBehavior.Instance);
+                campaignStarter.AddBehavior(new FeastBehavior());
                 campaignStarter.AddBehavior(new SettlementCultureChangerBehavior());
                 AIComputationLogger.ClearLog();
             }

@@ -146,55 +146,55 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
         }
 
         private static (float modifiedScore, string modifications) ApplyEnhancedAILogic(MobileParty party, AIBehaviorTuple behavior, float originalScore)
+        {
+            float modifiedScore = originalScore;
+            var modifications = new StringBuilder();
+            var hero = party.LeaderHero;
+            var kingdom = hero?.Clan?.Kingdom;
+
+            if (kingdom == null) return (modifiedScore, "");
+
+            // Enhanced defensive behavior
+            var defensiveResult = ApplyDefensiveBehaviorEnhancements(party, behavior, modifiedScore);
+            modifiedScore = defensiveResult.score;
+            if (!string.IsNullOrEmpty(defensiveResult.changes))
             {
-                float modifiedScore = originalScore;
-                var modifications = new StringBuilder();
-                var hero = party.LeaderHero;
-                var kingdom = hero?.Clan?.Kingdom;
+                modifications.Append($"Def:{defensiveResult.changes};");
+            }
 
-                if (kingdom == null) return (modifiedScore, "");
+            // Enhanced offensive behavior
+            var offensiveResult = ApplyOffensiveBehaviorEnhancements(party, behavior, modifiedScore);
+            modifiedScore = offensiveResult.score;
+            if (!string.IsNullOrEmpty(offensiveResult.changes))
+            {
+                modifications.Append($"Off:{offensiveResult.changes};");
+            }
 
-                // Enhanced defensive behavior
-                var defensiveResult = ApplyDefensiveBehaviorEnhancements(party, behavior, modifiedScore);
-                modifiedScore = defensiveResult.score;
-                if (!string.IsNullOrEmpty(defensiveResult.changes))
-                {
-                    modifications.Append($"Def:{defensiveResult.changes};");
-                }
+            // Strategic positioning improvements
+            var positioningResult = ApplyStrategicPositioningLogic(party, behavior, modifiedScore);
+            modifiedScore = positioningResult.score;
+            if (!string.IsNullOrEmpty(positioningResult.changes))
+            {
+                modifications.Append($"Pos:{positioningResult.changes};");
+            }
 
-                // Enhanced offensive behavior
-                var offensiveResult = ApplyOffensiveBehaviorEnhancements(party, behavior, modifiedScore);
-                modifiedScore = offensiveResult.score;
-                if (!string.IsNullOrEmpty(offensiveResult.changes))
-                {
-                    modifications.Append($"Off:{offensiveResult.changes};");
-                }
+            // Feast-aware behavior modifications
+            var feastResult = ApplyFeastAwareBehavior(party, behavior, modifiedScore, kingdom);
+            modifiedScore = feastResult.score;
+            if (!string.IsNullOrEmpty(feastResult.changes))
+            {
+                modifications.Append($"Feast:{feastResult.changes};");
+            }
 
-                // Strategic positioning improvements
-                var positioningResult = ApplyStrategicPositioningLogic(party, behavior, modifiedScore);
-                modifiedScore = positioningResult.score;
-                if (!string.IsNullOrEmpty(positioningResult.changes))
-                {
-                    modifications.Append($"Pos:{positioningResult.changes};");
-                }
+            // Seasonal and economic considerations
+            var seasonalResult = ApplySeasonalConsiderations(party, behavior, modifiedScore);
+            modifiedScore = seasonalResult.score;
+            if (!string.IsNullOrEmpty(seasonalResult.changes))
+            {
+                modifications.Append($"Season:{seasonalResult.changes};");
+            }
 
-                // Feast-aware behavior modifications
-                var feastResult = ApplyFeastAwareBehavior(party, behavior, modifiedScore, kingdom);
-                modifiedScore = feastResult.score;
-                if (!string.IsNullOrEmpty(feastResult.changes))
-                {
-                    modifications.Append($"Feast:{feastResult.changes};");
-                }
-
-                // Seasonal and economic considerations
-                var seasonalResult = ApplySeasonalConsiderations(party, behavior, modifiedScore);
-                modifiedScore = seasonalResult.score;
-                if (!string.IsNullOrEmpty(seasonalResult.changes))
-                {
-                    modifications.Append($"Season:{seasonalResult.changes};");
-                }
-
-                return (modifiedScore, modifications.ToString());
+            return (modifiedScore, modifications.ToString());
         }
 
         private static (float score, string changes) ApplyDefensiveBehaviorEnhancements(MobileParty party, AIBehaviorTuple behavior, float score)
@@ -254,6 +254,15 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
                         float threatLevel = CalculateSettlementThreatLevel(settlement, kingdom);
 
                         float allyDefenseBonus = (threatLevel * 50f) / (1f + distance / 150f);
+
+                        // NEW: Check if we should provide screening for sieging allies
+                        var screeningBonus = EvaluateScreeningNeed(party, settlement, kingdom);
+                        allyDefenseBonus += screeningBonus.bonus;
+                        if (!string.IsNullOrEmpty(screeningBonus.reason))
+                        {
+                            changes.Append($"{screeningBonus.reason};");
+                        }
+
                         score += allyDefenseBonus;
                         totalBonus += allyDefenseBonus;
                         changes.Append($"AllyThreat+{allyDefenseBonus:F1};");
@@ -293,6 +302,45 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
             return (score, changes.ToString());
         }
 
+        // NEW: Evaluate need for screening/defensive support
+        private static (float bonus, string reason) EvaluateScreeningNeed(MobileParty party, Settlement settlement, Kingdom kingdom)
+        {
+            // Check if any allies are besieging nearby enemy settlements
+            var nearbyEnemySettlements = Kingdom.All
+                .Where(k => k != kingdom && kingdom.IsAtWarWith(k))
+                .SelectMany(k => k.Settlements)
+                .Where(s => party.Position2D.Distance(s.Position2D) < 100f);
+
+            foreach (var enemySettlement in nearbyEnemySettlements)
+            {
+                var besiegingAllies = GetNearbyAlliedParties(party, 75f, kingdom)
+                    .Where(p => p.BesiegedSettlement == enemySettlement)
+                    .ToList();
+
+                if (besiegingAllies.Any())
+                {
+                    // Allies are besieging nearby - check for enemy relief forces
+                    var incomingEnemies = GetNearbyEnemyParties(party, 200f)
+                        .Where(e => e.Position2D.Distance(enemySettlement.Position2D) < 150f)
+                        .ToList();
+
+                    if (incomingEnemies.Any())
+                    {
+                        float totalEnemyStrength = incomingEnemies.Sum(e => e.Party.TotalStrength);
+                        float totalAllyStrength = besiegingAllies.Sum(a => a.Party.TotalStrength);
+
+                        if (totalEnemyStrength > totalAllyStrength * 0.8f)
+                        {
+                            // Enemy relief force is significant - screening is valuable
+                            return (100f, "ScreeningNeeded+100");
+                        }
+                    }
+                }
+            }
+
+            return (0f, "");
+        }
+
         private static (float score, string changes) ApplyOffensiveBehaviorEnhancements(MobileParty party, AIBehaviorTuple behavior, float score)
         {
             var changes = new StringBuilder();
@@ -319,6 +367,15 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
                             viableTargets++;
                             float targetValue = CalculateTargetValue(target);
                             float proximityBonus = (200f - distance) / 200f * targetValue;
+
+                            // NEW: Check for army coordination needs
+                            var coordinationResult = EvaluateArmyCoordination(party, target, kingdom);
+                            proximityBonus += coordinationResult.bonus;
+                            if (!string.IsNullOrEmpty(coordinationResult.reason))
+                            {
+                                changes.Append($"{coordinationResult.reason};");
+                            }
+
                             score += proximityBonus;
                             totalBonus += proximityBonus;
                             changes.Append($"Target+{proximityBonus:F1};");
@@ -384,6 +441,52 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
             }
 
             return (score, changes.ToString());
+        }
+
+        // NEW: Army coordination evaluation
+        private static (float bonus, string reason) EvaluateArmyCoordination(MobileParty party, Settlement target, Kingdom kingdom)
+        {
+            // Check if there are already friendly armies near this target
+            var nearbyAllies = GetNearbyAlliedParties(party, 100f, kingdom)
+                .Where(p => p.Position2D.Distance(target.Position2D) < 50f)
+                .ToList();
+
+            if (!nearbyAllies.Any())
+                return (0f, ""); // No coordination needed
+
+            // Check if any ally is already besieging this target
+            var besiegingAlly = nearbyAllies.FirstOrDefault(ally =>
+                ally.BesiegedSettlement == target);
+
+            if (besiegingAlly != null)
+            {
+                // Another army is already sieging - we should provide defensive support
+                var nearbyEnemies = GetNearbyEnemyParties(party, 150f).ToList();
+
+                if (nearbyEnemies.Any())
+                {
+                    // Enemy relief force nearby - defensive role is more valuable
+                    return (-150f, "AllyBesieging-150"); // Reduce offensive behavior
+                }
+                else
+                {
+                    // No immediate threat - less penalty but still discourage doubling up
+                    return (-75f, "AllyBesieging-75");
+                }
+            }
+
+            // Check if we're the strongest army in the group
+            var ourStrength = party.Party.TotalStrength;
+            var strongestAlly = nearbyAllies.OrderByDescending(p => p.Party.TotalStrength).FirstOrDefault();
+
+            if (strongestAlly != null && ourStrength > strongestAlly.Party.TotalStrength * 1.2f)
+            {
+                // We're significantly stronger - we should lead the siege
+                return (50f, "StrongestArmy+50");
+            }
+
+            // We're not the strongest - support role is better
+            return (-100f, "SupportRole-100");
         }
 
         private static (float score, string changes) ApplyStrategicPositioningLogic(MobileParty party, AIBehaviorTuple behavior, float score)

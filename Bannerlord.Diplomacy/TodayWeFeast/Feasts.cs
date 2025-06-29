@@ -12,6 +12,8 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 using TaleWorlds.SaveSystem;
 
+using WarAndAiTweaks.AI;
+
 namespace TodayWeFeast
 {
     public class FeastObject
@@ -65,32 +67,16 @@ namespace TodayWeFeast
                 MBInformationManager.AddQuickInformation(message);
             }
 
-            // Actually make AI lords travel to the feast
-            foreach (var invitedLord in this.lordsInFeast)
-            {
-                if (invitedLord != Hero.MainHero && invitedLord.PartyBelongedTo != null)
-                {
-                    var party = invitedLord.PartyBelongedTo;
-
-                    // If they're not already at the settlement, make them travel there
-                    if (invitedLord.CurrentSettlement != this.feastSettlement)
-                    {
-                        party.Ai.SetMoveGoToSettlement(this.feastSettlement);
-                    }
-
-                    // For both HOST and GUESTS: Disable other AI decisions to ensure they stay at the feast.
-                    // The host is now forced to travel if not present, and their AI is locked.
-                    party.Ai.SetDoNotMakeNewDecisions(true);
-                }
-            }
+            // NOTE: AI behavior is now handled through the behavior scoring system in AIMilitaryBehaviorPatches
+            // No need to disable AI or force movement here - the scoring system will handle feast attendance
         }
 
         public void endFeast()
         {
             InformationManager.DisplayMessage(new InformationMessage($"The feast at {this.feastSettlement.Name} has ended.", Colors.Green));
 
-            this.hostOfFeast.Clan.AddRenown(10, true); // REDUCED from 50 to 10
-            this.hostOfFeast.AddSkillXp(DefaultSkills.Steward, 500); // REDUCED from 1000 to 500
+            this.hostOfFeast.Clan.AddRenown(10, true);
+            this.hostOfFeast.AddSkillXp(DefaultSkills.Steward, 500);
 
             // Create a comprehensive list of ALL heroes who might have been affected by this feast
             var allAffectedHeroes = new HashSet<Hero>();
@@ -112,28 +98,13 @@ namespace TodayWeFeast
                 }
             }
 
-            // Re-enable AI for ALL affected heroes
+            // Apply relation bonuses only to original guests (not the host)
             foreach (Hero hero in allAffectedHeroes)
             {
-                // IMPORTANT: Re-enable ALL hero AI when feast ends (except player)
-                if (hero != Hero.MainHero && hero.PartyBelongedTo != null)
-                {
-                    hero.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
-                    // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for {hero.Name}", Colors.Yellow));
-                }
-
-                // Apply relation bonuses only to original guests (not the host)
                 if (hero != this.hostOfFeast && this.initialLordsInFeast?.Contains(hero) == true)
                 {
-                    ChangeRelationAction.ApplyRelationChangeBetweenHeroes(this.hostOfFeast, hero, 1, true); // REDUCED from 5 to 1
+                    ChangeRelationAction.ApplyRelationChangeBetweenHeroes(this.hostOfFeast, hero, 1, true);
                 }
-            }
-
-            // IMPORTANT: Always re-enable the host's AI when the feast ends
-            if (this.hostOfFeast != Hero.MainHero && this.hostOfFeast.PartyBelongedTo != null)
-            {
-                this.hostOfFeast.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
-                // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for host {this.hostOfFeast.Name}", Colors.Yellow));
             }
 
             if (this.feastSettlement.IsTown)
@@ -158,37 +129,14 @@ namespace TodayWeFeast
         {
             currentDay++; // A feast gets older each day.
 
+            // ENHANCED: Process feast attendance AI to ensure proper behavior scoring
+            ProcessFeastAttendanceAI();
+
             // --- GUEST LEAVING LOGIC ---
-            // On each day of the feast, AI guests will re-evaluate if they want to stay.
             var feastAttendingScoringModel = new FeastAttendingScoringModel();
             var lordsToLeave = new List<Hero>();
 
-            if (this.hostOfFeast != Hero.MainHero && this.hostOfFeast.PartyBelongedTo != null)
-            {
-                if (this.hostOfFeast.CurrentSettlement != this.feastSettlement)
-                {
-                    // InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Enforcing host {this.hostOfFeast.Name} return to {this.feastSettlement.Name}", Colors.Red));
-
-                    // Lock AI decisions and force travel
-                    this.hostOfFeast.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(true);
-
-                    // If the host has somehow wandered away, force them back to the feast
-                    this.hostOfFeast.PartyBelongedTo.Ai.SetMoveGoToSettlement(this.feastSettlement);
-
-                    // For extreme cases, just teleport them back
-                    if (MBRandom.RandomFloat < 0.5f) // 50% chance each day to just teleport back if they left
-                    {
-                        TeleportHeroAction.ApplyImmediateTeleportToSettlement(this.hostOfFeast, this.feastSettlement);
-                    }
-                }
-                else
-                {
-                    // They're at the feast location, make super sure their AI stays locked
-                    this.hostOfFeast.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(true);
-                }
-            }
-
-            // Check if any guests want to leave
+            // Check if any guests want to leave using the improved scoring model
             if (this.lordsInFeast != null)
             {
                 foreach (Hero guest in this.lordsInFeast.ToList())
@@ -196,10 +144,22 @@ namespace TodayWeFeast
                     if (guest == this.hostOfFeast || guest == Hero.MainHero)
                         continue; // Skip host and player
 
-                    // Simple leaving logic - some chance to leave each day after day 3
-                    if (this.currentDay > 3 && MBRandom.RandomFloat < 0.2f) // 20% chance to leave after day 3
+                    // Use the enhanced scoring model to determine if they should leave
+                    var attendanceScore = feastAttendingScoringModel.GetFeastAttendingScore(guest, this);
+
+                    // If score is negative, they want to leave
+                    if (attendanceScore.ResultNumber < -25f)
                     {
                         lordsToLeave.Add(guest);
+                    }
+
+                    // ADDITIONAL: Random chance to leave after day 5 regardless of score
+                    if (this.currentDay > 5 && MBRandom.RandomFloat < 0.15f) // 15% chance per day after day 5
+                    {
+                        if (!lordsToLeave.Contains(guest))
+                        {
+                            lordsToLeave.Add(guest);
+                        }
                     }
                 }
             }
@@ -208,16 +168,6 @@ namespace TodayWeFeast
             foreach (var lord in lordsToLeave)
             {
                 this.lordsInFeast.Remove(lord);
-                if (lord.PartyBelongedTo != null)
-                {
-                    // IMPORTANT: Re-enable their AI so they can go about their business.
-                    lord.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
-                    // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for departing lord {lord.Name}", Colors.Orange));
-                }
-                TextObject message = new TextObject("{=leaving_feast_message}{LORD_NAME} has left the feast at {SETTLEMENT_NAME}.");
-                message.SetTextVariable("LORD_NAME", lord.Name);
-                message.SetTextVariable("SETTLEMENT_NAME", this.feastSettlement.Name);
-                MBInformationManager.AddQuickInformation(message);
             }
 
             // --- HOST ENDING FEAST LOGIC ---
@@ -241,7 +191,7 @@ namespace TodayWeFeast
                     {
                         if (guest != this.hostOfFeast && guest != Hero.MainHero)
                         {
-                            ChangeRelationAction.ApplyRelationChangeBetweenHeroes(guest, this.hostOfFeast, 1, false); // ALREADY +1, no change needed
+                            ChangeRelationAction.ApplyRelationChangeBetweenHeroes(guest, this.hostOfFeast, 1, false);
                         }
                     }
                 }
@@ -255,7 +205,7 @@ namespace TodayWeFeast
             }
             else
             {
-                // Food consumption logic
+                // Food consumption logic remains the same...
                 if (lordsInFeast != null)
                 {
                     foreach (Hero hero in this.lordsInFeast)
@@ -284,7 +234,6 @@ namespace TodayWeFeast
                                     this.feastRoster.AddToCounts(this.feastRoster[0].EquipmentElement, -1);
                                     this.amountOfFood--;
                                 }
-
                             }
                             catch
                             {
@@ -319,6 +268,32 @@ namespace TodayWeFeast
                 }
             }
             this.amountOfFood = count;
+        }
+
+        // ENHANCED: New method that works purely through AI scoring without disabling AI
+        private void ProcessFeastAttendanceAI()
+        {
+            if (this.lordsInFeast == null) return;
+
+            // DISABLED: Commented out logging to improve performance
+            // Log feast attendance status for debugging
+            // AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_ATTENDANCE_CHECK,{this.kingdom.StringId},{this.feastSettlement.Name},{this.hostOfFeast.Name},{this.lordsInFeast.Count},{this.currentDay}");
+
+            foreach (var lord in this.lordsInFeast.ToList())
+            {
+                if (lord == Hero.MainHero) continue; // Skip player
+
+                var currentLocation = lord.CurrentSettlement?.Name?.ToString() ?? "traveling";
+                var isAtFeast = lord.CurrentSettlement == this.feastSettlement;
+                var isHost = lord == this.hostOfFeast;
+
+                // DISABLED: Commented out individual lord status logging
+                // Log each lord's status
+                // AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_LORD_STATUS,{this.kingdom.StringId},{lord.Name},{currentLocation},{isAtFeast},{isHost}");
+
+                // The actual scoring boost is handled in AIMilitaryBehaviorPatches.cs
+                // This method is mainly for logging and any additional feast logic
+            }
         }
 
         [SaveableField(11)]

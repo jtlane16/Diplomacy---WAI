@@ -222,12 +222,8 @@ namespace WarAndAiTweaks.AI
 
         public static void LogFeastBehaviorImpact(MobileParty party, bool attendingFeast, bool kingdomFeasting, bool enemyFeasting, float feastImpact)
         {
-            if (!EnableDetailedPartyLogging) return; // Add this check
-
-            var heroName = party.LeaderHero?.Name?.ToString() ?? "Unknown";
-            var kingdomId = party.LeaderHero?.Clan?.Kingdom?.StringId ?? "None";
-
-            WriteLine($"{DateTime.UtcNow:o},FEAST_BEHAVIOR_IMPACT,{kingdomId},{heroName},{(attendingFeast ? 1 : 0)},{(kingdomFeasting ? 1 : 0)},{(enemyFeasting ? 1 : 0)},{feastImpact:F2}");
+            // DISABLED: Feast logging disabled for performance
+            return;
         }
 
         public static void LogSeasonalBehaviorImpact(MobileParty party, string season, bool isOffensive, bool isDefensive, float seasonalBonus)

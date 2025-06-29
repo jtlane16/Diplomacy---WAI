@@ -25,7 +25,8 @@ namespace WarAndAiTweaks.AI
     public sealed class StrategicAI
     {
         // --- AI Behavior Constants ---
-        public const float WAR_THRESHOLD = 75f;
+        // INCREASED: Higher threshold to prevent too many wars
+        public const float WAR_THRESHOLD = 75f; // Increased from 50f
         public const float WAR_DESIRE_RAMP_DAYS = 30f;
         public const float MAX_WAR_DESIRE = 35f;
         public const float WAR_FATIGUE_RAMP_DAYS = 30f;
@@ -65,11 +66,8 @@ namespace WarAndAiTweaks.AI
             switch (_currentGoal.Type)
             {
                 case GoalType.Expand:
-                    // NEW: Only consider betrayal if expansion is truly blocked
-                    if (IsExpansionBlocked() && allianceValue.weakestAlly != null)
-                    {
-                        ExecuteExpansion(ref warDeclaredThisTick, _currentGoal as ExpandGoal);
-                    }
+                    // FIXED: Always try expansion, regardless of alliance blocking
+                    ExecuteExpansion(ref warDeclaredThisTick, _currentGoal as ExpandGoal);
                     break;
                 case GoalType.Survive:
                     ExecuteSurvival(_currentGoal as SurviveGoal);
@@ -79,8 +77,8 @@ namespace WarAndAiTweaks.AI
                     break;
             }
 
-            // NEW: Smarter alliance breaking logic
-            if (ShouldConsiderBetrayalTiming())
+            // NEW: Smarter alliance breaking logic - only if expansion is blocked
+            if (ShouldConsiderBetrayalTiming() && IsExpansionBlocked())
             {
                 HandleAllianceBetrayalLogic(allianceValue);
             }
@@ -244,19 +242,25 @@ namespace WarAndAiTweaks.AI
 
         private float ApplyEconomicTimingBonus(float score, Kingdom target)
         {
-            // NEW: Economic opportunity timing
-            if (target.RulingClan.Gold < 50000 && _owner.RulingClan.Gold > target.RulingClan.Gold * 2)
+            // FIXED: Add null checks to prevent crash
+            if (target?.RulingClan == null)
             {
-                score += 25f; // Strike when enemy is economically weak
+                return score; // Return original score if target or ruling clan is null
             }
-            
-            // NEW: Harvest season bonus for capturing settlements
+
+            // Strike when enemy is economically weak
+            if (target.RulingClan.Gold < 50000 && _owner?.RulingClan != null && _owner.RulingClan.Gold > target.RulingClan.Gold * 2)
+            {
+                score += 25f;
+            }
+
+            // Harvest season bonus
             var currentSeason = CampaignTime.Now.GetSeasonOfYear;
             if (currentSeason == CampaignTime.Seasons.Autumn)
             {
-                score += 15f; // Better time to capture and hold territory
+                score += 15f;
             }
-            
+
             return score;
         }
 
@@ -440,21 +444,21 @@ namespace WarAndAiTweaks.AI
 
         private float ApplyFeastWarPenalties(float score, Kingdom target)
         {
-            // Apply the same feast penalties as in the war evaluator
+            // REDUCED: Apply more moderate feast penalties
             if (FeastBehavior.Instance.feastIsPresent(_owner))
             {
                 var ourFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == _owner);
-                float basePenalty = -200f;
+                float basePenalty = -100f; // Reduced from -200f
 
                 if (ourFeast != null)
                 {
-                    float investmentPenalty = (ourFeast.lordsInFeast?.Count ?? 0) * 8f;
-                    float durationPenalty = ourFeast.currentDay * 20f;
+                    float investmentPenalty = (ourFeast.lordsInFeast?.Count ?? 0) * 4f; // Reduced from 8f
+                    float durationPenalty = ourFeast.currentDay * 10f; // Reduced from 20f
 
                     int generosity = _owner.Leader.GetTraitLevel(DefaultTraits.Generosity);
                     if (generosity > 0)
                     {
-                        investmentPenalty += generosity * 25f;
+                        investmentPenalty += generosity * 15f; // Reduced from 25f
                     }
 
                     basePenalty -= investmentPenalty + durationPenalty;
@@ -466,16 +470,16 @@ namespace WarAndAiTweaks.AI
             if (FeastBehavior.Instance.feastIsPresent(target))
             {
                 var targetFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == target);
-                float basePenalty = -75f;
-                float honorPenalty = _owner.Leader.GetTraitLevel(DefaultTraits.Honor) * 35f;
+                float basePenalty = -50f; // Reduced from -75f
+                float honorPenalty = _owner.Leader.GetTraitLevel(DefaultTraits.Honor) * 25f; // Reduced from 35f
 
                 if (targetFeast != null)
                 {
-                    float guestPenalty = (targetFeast.lordsInFeast?.Count ?? 0) * 5f;
+                    float guestPenalty = (targetFeast.lordsInFeast?.Count ?? 0) * 3f; // Reduced from 5f
 
                     if (targetFeast.currentDay <= 3)
                     {
-                        guestPenalty += 25f;
+                        guestPenalty += 15f; // Reduced from 25f
                     }
 
                     basePenalty -= guestPenalty;
@@ -494,6 +498,7 @@ namespace WarAndAiTweaks.AI
 
         public class DefaultWarEvaluator : IWarEvaluator
         {
+            // INCREASED: Make multi-front wars much more costly
             private const float DistanceWeight = 75f;
             private const float MaxDistance = 1500f;
             private const float SnowballRatioThreshold = 1.5f;
@@ -501,8 +506,8 @@ namespace WarAndAiTweaks.AI
             private const float TerritoryWeight = 25f;
             private const float AllianceTerritoryWeight = 15f;
             private const float SharedBorderBonus = 30f;
-            private const float NoSharedBorderPenalty = -300f;
-            private const float RECENT_PEACE_PENALTY_MAX = -400f;
+            private const float NoSharedBorderPenalty = -200f;
+            private const float RECENT_PEACE_PENALTY_MAX = -300f;
             private const float INFAMY_PENALTY_MAX = -100f;
 
             public ExplainedNumber GetWarScore(Kingdom a, Kingdom b, int daysSinceLastWar, Dictionary<string, CampaignTime> lastPeaceTimes)
@@ -532,38 +537,38 @@ namespace WarAndAiTweaks.AI
                 if (mostRecentPeace != default(CampaignTime))
                 {
                     var daysSinceAnyPeace = CampaignTime.Now.ToDays - mostRecentPeace.ToDays;
-                    if (daysSinceAnyPeace < 20) // Apply a heavy penalty for 20 days after ANY peace treaty.
+                    if (daysSinceAnyPeace < 15) // Reduced from 20 days
                     {
-                        var penalty = RECENT_PEACE_PENALTY_MAX * (float) (1 - (daysSinceAnyPeace / 20f));
+                        var penalty = RECENT_PEACE_PENALTY_MAX * (float) (1 - (daysSinceAnyPeace / 15f));
                         explainedNumber.Add(penalty, new TextObject("Consolidating after a recent war"));
                     }
                 }
 
-                // Enhanced feast considerations
+                // MODERATED: Reduced feast penalties
                 if (FeastBehavior.Instance != null)
                 {
                     // Check if target kingdom is hosting a feast
                     if (FeastBehavior.Instance.feastIsPresent(b))
                     {
                         var targetFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == b);
-                        float basePenalty = -75f; // Increased from -50f
-                        float honorPenalty = a.Leader.GetTraitLevel(DefaultTraits.Honor) * 35f; // Increased from 25f
-                        
+                        float basePenalty = -50f; // Reduced from -75f
+                        float honorPenalty = a.Leader.GetTraitLevel(DefaultTraits.Honor) * 25f; // Reduced from 35f
+
                         // Additional penalties based on feast characteristics
                         if (targetFeast != null)
                         {
                             // Penalty increases with feast guest count (more dishonor)
-                            float guestPenalty = (targetFeast.lordsInFeast?.Count ?? 0) * 5f;
-                            
+                            float guestPenalty = (targetFeast.lordsInFeast?.Count ?? 0) * 3f; // Reduced from 5f
+
                             // Penalty increases if it's early in the feast (more disruptive)
                             if (targetFeast.currentDay <= 3)
                             {
-                                guestPenalty += 25f; // Early feast disruption is worse
+                                guestPenalty += 15f; // Reduced from 25f
                             }
-                            
+
                             basePenalty -= guestPenalty;
                         }
-                        
+
                         explainedNumber.Add(basePenalty - honorPenalty, new TextObject("Attacking while they are feasting would be dishonorable"));
                     }
 
@@ -571,24 +576,24 @@ namespace WarAndAiTweaks.AI
                     if (FeastBehavior.Instance.feastIsPresent(a))
                     {
                         var ourFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == a);
-                        float basePenalty = -200f; // Increased from -150f
-                        
+                        float basePenalty = -100f; // Reduced from -200f
+
                         if (ourFeast != null)
                         {
                             // Penalty increases with our investment in the feast
-                            float investmentPenalty = (ourFeast.lordsInFeast?.Count ?? 0) * 8f;
-                            float durationPenalty = ourFeast.currentDay * 20f;
-                            
+                            float investmentPenalty = (ourFeast.lordsInFeast?.Count ?? 0) * 4f; // Reduced from 8f
+                            float durationPenalty = ourFeast.currentDay * 10f; // Reduced from 20f
+
                             // Cultural penalty for breaking hospitality traditions
                             int generosity = a.Leader.GetTraitLevel(DefaultTraits.Generosity);
                             if (generosity > 0)
                             {
-                                investmentPenalty += generosity * 25f; // Generous hosts hate abandoning guests
+                                investmentPenalty += generosity * 15f; // Reduced from 25f
                             }
-                            
+
                             basePenalty -= investmentPenalty + durationPenalty;
                         }
-                        
+
                         explainedNumber.Add(basePenalty, new TextObject("We are hosting a feast and a war would disrupt the festivities"));
                     }
 
@@ -598,8 +603,8 @@ namespace WarAndAiTweaks.AI
                     {
                         if (FeastBehavior.Instance.feastIsPresent(ally))
                         {
-                            float allyPenalty = -25f;
-                            float relationBonus = a.GetRelation(ally) > 20 ? -15f : 0f; // Closer allies matter more
+                            float allyPenalty = -15f; // Reduced from -25f
+                            float relationBonus = a.GetRelation(ally) > 20 ? -10f : 0f; // Reduced from -15f
                             explainedNumber.Add(allyPenalty + relationBonus, new TextObject($"Our ally {ally.Name} is hosting a feast"));
                         }
                     }
@@ -611,19 +616,20 @@ namespace WarAndAiTweaks.AI
                         int activeFeastsCount = FeastBehavior.Instance.Feasts.Count;
                         if (activeFeastsCount > 0)
                         {
-                            float seasonalPenalty = -activeFeastsCount * 10f;
+                            float seasonalPenalty = -activeFeastsCount * 5f; // Reduced from 10f
                             explainedNumber.Add(seasonalPenalty, new TextObject("Traditional feast season discourages warfare"));
                         }
                     }
                 }
 
+                // Rest of the method remains the same...
                 var peaceKey = (string.Compare(a.StringId, b.StringId) < 0) ? $"{a.StringId}_{b.StringId}" : $"{b.StringId}_{a.StringId}";
                 if (lastPeaceTimes.TryGetValue(peaceKey, out var peaceTime))
                 {
                     var daysSincePeace = CampaignTime.Now.ToDays - peaceTime.ToDays;
-                    if (daysSincePeace < 100)
+                    if (daysSincePeace < 60) // Reduced from 100 days
                     {
-                        var penalty = RECENT_PEACE_PENALTY_MAX * (float) (1 - (daysSincePeace / 100f));
+                        var penalty = RECENT_PEACE_PENALTY_MAX * (float) (1 - (daysSincePeace / 60f));
                         explainedNumber.Add(penalty, new TextObject("Recently made peace"));
                     }
                 }
@@ -659,8 +665,9 @@ namespace WarAndAiTweaks.AI
                 float distPenalty = ComputeDistancePenalty(a, b);
                 explainedNumber.Add(distPenalty, new TextObject("Distance Penalty"));
 
+                // MASSIVELY INCREASED: Multi-front war penalties
                 int activeWars = FactionManager.GetEnemyKingdoms(a).Count();
-                float warPenalty = activeWars * 150f;
+                float warPenalty = CalculateMultiWarPenalty(activeWars);
                 explainedNumber.Add(-warPenalty, new TextObject("Active Wars Penalty"));
 
                 float snowball = strengthB > strengthA * SnowballRatioThreshold ? SnowballBonus : 0f;
@@ -714,6 +721,21 @@ namespace WarAndAiTweaks.AI
                 }
 
                 return explainedNumber;
+            }
+
+            // NEW: Much more severe multi-war penalties
+            private float CalculateMultiWarPenalty(int activeWars)
+            {
+                if (activeWars == 0) return 0f;
+
+                // Exponentially increasing penalties for multiple wars
+                switch (activeWars)
+                {
+                    case 1: return 200f; // Doubled from 100f
+                    case 2: return 500f; // Massive penalty for 3rd war
+                    case 3: return 1000f; // Extreme penalty for 4th war
+                    default: return 1000f + ((activeWars - 3) * 300f); // Each additional war adds 300
+                }
             }
 
             private float ComputeDistancePenalty(Kingdom a, Kingdom b)
@@ -791,7 +813,7 @@ namespace WarAndAiTweaks.AI
                     return 0f;
 
                 var posA = new Vec2(aList.Average(s => s.Position2D.X), aList.Average(s => s.Position2D.Y));
-                var posB = new Vec2(bList.Average(s => s.Position2D.X), bList.Average(s => s.Position2D.Y));
+                var posB = new Vec2(aList.Average(s => s.Position2D.X), bList.Average(s => s.Position2D.Y));
                 float dist = posA.Distance(posB);
                 return TWMathF.Clamp(dist / MaxDistance, 0f, 1f) * WarWearinessFromDistanceWeight;
             }

@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Text;
 
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -20,129 +21,158 @@ using WarAndAiTweaks.AI;
 
 namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
 {
-    [HarmonyPatch]
+    [HarmonyPatch(typeof(PartyThinkParams), "AddBehaviorScore")]
     public class AIMilitaryBehaviorPatches
     {
-        // Try to find and patch PartyThinkParams.AddBehaviorScore
-        static MethodBase TargetMethod()
+        private static readonly Dictionary<string, DateTime> _lastProcessingTime = new Dictionary<string, DateTime>();
+        private static readonly TimeSpan _processingCooldown = TimeSpan.FromSeconds(5); // Only process each party every 5 seconds
+
+        private static bool _isAddingFeastBehaviors = false;
+        private static readonly Dictionary<string, DateTime> _lastFeastCheck = new Dictionary<string, DateTime>();
+        private static readonly TimeSpan _feastCheckCooldown = TimeSpan.FromSeconds(10); // Check feasts less frequently
+
+        private static void Prefix(ref ValueTuple<AIBehaviorTuple, float> value, PartyThinkParams __instance)
         {
-            // Look for PartyThinkParams class first
-            var partyThinkParamsType = AccessTools.TypeByName("TaleWorlds.CampaignSystem.Party.PartyThinkParams");
-            if (partyThinkParamsType == null)
-            {
-                // Try alternative names
-                partyThinkParamsType = AccessTools.TypeByName("TaleWorlds.CampaignSystem.PartyThinkParams");
-            }
+            var behavior = value.Item1;
+            var originalScore = value.Item2;
+            var party = __instance.MobilePartyOf;
 
-            if (partyThinkParamsType != null)
-            {
-                var method = AccessTools.Method(partyThinkParamsType, "AddBehaviorScore",
-                    new Type[] { typeof(ValueTuple<AIBehaviorTuple, float>) });
+            if (party?.LeaderHero?.Clan?.Kingdom == null) return;
 
-                if (method != null)
+            // PERFORMANCE: Skip frequent processing for the same party
+            string partyKey = party.StringId;
+            DateTime now = DateTime.UtcNow;
+
+            if (_lastProcessingTime.TryGetValue(partyKey, out DateTime lastTime))
+            {
+                if (now - lastTime < _processingCooldown)
                 {
-                    AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},PATCH_TARGET_FOUND,PartyThinkParams.AddBehaviorScore located successfully");
-                    return method;
+                    return; // Skip processing for this party
+                }
+            }
+            _lastProcessingTime[partyKey] = now;
+
+            // Clean up old entries periodically
+            if (_lastProcessingTime.Count > 200) // Arbitrary limit
+            {
+                var keysToRemove = _lastProcessingTime
+                    .Where(kvp => now - kvp.Value > TimeSpan.FromMinutes(10))
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+
+                foreach (var key in keysToRemove)
+                {
+                    _lastProcessingTime.Remove(key);
                 }
             }
 
-            // Fallback: try to find it in any class
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            foreach (var assembly in assemblies)
+            // Apply enhanced AI logic
+            var result = ApplyEnhancedAILogic(party, behavior, originalScore);
+            var modifiedScore = result.modifiedScore;
+            var modifications = result.modifications;
+
+            // Only log major changes during wartime
+            if (!string.IsNullOrEmpty(modifications) && Math.Abs(modifiedScore - originalScore) > 1000f)
             {
-                if (assembly.GetName().Name.Contains("TaleWorlds"))
+                //AIComputationLogger.WriteLine($"Major behavior change for {party.Name}: {behavior} | {originalScore:F0} -> {modifiedScore:F0} | {modifications}");
+            }
+
+            value = new ValueTuple<AIBehaviorTuple, float>(behavior, modifiedScore);
+        }
+
+        private static void AddFeastSpecificBehaviors(PartyThinkParams thinkParams, MobileParty party)
+        {
+            if (FeastBehavior.Instance == null) return;
+
+            var kingdom = party.LeaderHero?.Clan?.Kingdom;
+            if (kingdom == null) return;
+
+            // PERFORMANCE: Skip feast behavior injection during active wars for non-feast participants
+            bool isAtWar = FactionManager.GetEnemyKingdoms(kingdom).Any();
+            if (isAtWar)
+            {
+                // During war, only process feast behaviors for actual feast participants
+                var activeFeast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == kingdom);
+                if (activeFeast == null || !activeFeast.lordsInFeast.Contains(party.LeaderHero))
                 {
-                    foreach (var type in assembly.GetTypes())
+                    return; // Skip feast processing for non-participants during war
+                }
+            }
+
+            // PERFORMANCE: Rate limit feast checks
+            string partyKey = $"feast_{party.StringId}";
+            DateTime now = DateTime.UtcNow;
+            
+            if (_lastFeastCheck.TryGetValue(partyKey, out DateTime lastCheck))
+            {
+                if (now - lastCheck < _feastCheckCooldown)
+                {
+                    return; // Skip feast check for this party
+                }
+            }
+            _lastFeastCheck[partyKey] = now;
+
+            var feast = FeastBehavior.Instance.Feasts.FirstOrDefault(f => f.kingdom == kingdom);
+            if (feast == null) return;
+
+            bool isHost = feast.hostOfFeast == party.LeaderHero;
+            bool isInvited = feast.lordsInFeast?.Contains(party.LeaderHero) == true;
+            bool isAtFeast = party.LeaderHero.CurrentSettlement == feast.feastSettlement;
+
+            _isAddingFeastBehaviors = true;
+
+            try
+            {
+                // SIMPLIFIED: Only add critical behaviors during wartime
+                if (isHost)
+                {
+                    if (!isAtFeast)
                     {
-                        var method = AccessTools.Method(type, "AddBehaviorScore");
-                        if (method != null)
+                        // Host must return to feast
+                        AIBehaviorTuple goToFeastBehavior = new AIBehaviorTuple(feast.feastSettlement, AiBehavior.GoToSettlement, false);
+                        ValueTuple<AIBehaviorTuple, float> hostReturnBehavior = new ValueTuple<AIBehaviorTuple, float>(goToFeastBehavior, 30000f);
+                        thinkParams.AddBehaviorScore(hostReturnBehavior);
+                    }
+                    else
+                    {
+                        // Host must stay at feast
+                        AIBehaviorTuple holdBehavior = new AIBehaviorTuple(feast.feastSettlement, AiBehavior.Hold, false);
+                        ValueTuple<AIBehaviorTuple, float> hostHoldBehavior = new ValueTuple<AIBehaviorTuple, float>(holdBehavior, 25000f);
+                        thinkParams.AddBehaviorScore(hostHoldBehavior);
+                    }
+                }
+                else if (isInvited && !isAtWar) // Only process guests during peacetime
+                {
+                    if (!isAtFeast)
+                    {
+                        var attendanceModel = new FeastAttendingScoringModel();
+                        var attendanceScore = attendanceModel.GetFeastAttendingScore(party.LeaderHero, feast);
+
+                        if (attendanceScore.ResultNumber > 25f)
                         {
-                            AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},PATCH_TARGET_FOUND,Found AddBehaviorScore in {type.FullName}");
-                            return method;
+                            AIBehaviorTuple goToFeastBehavior = new AIBehaviorTuple(feast.feastSettlement, AiBehavior.GoToSettlement, false);
+                            ValueTuple<AIBehaviorTuple, float> guestAttendBehavior = new ValueTuple<AIBehaviorTuple, float>(goToFeastBehavior, 8000f + attendanceScore.ResultNumber);
+                            thinkParams.AddBehaviorScore(guestAttendBehavior);
+                        }
+                    }
+                    else
+                    {
+                        var attendanceModel = new FeastAttendingScoringModel();
+                        var attendanceScore = attendanceModel.GetFeastAttendingScore(party.LeaderHero, feast);
+
+                        if (attendanceScore.ResultNumber > -25f)
+                        {
+                            AIBehaviorTuple holdAtFeastBehavior = new AIBehaviorTuple(feast.feastSettlement, AiBehavior.Hold, false);
+                            ValueTuple<AIBehaviorTuple, float> guestStayBehavior = new ValueTuple<AIBehaviorTuple, float>(holdAtFeastBehavior, 5000f + attendanceScore.ResultNumber);
+                            thinkParams.AddBehaviorScore(guestStayBehavior);
                         }
                     }
                 }
             }
-
-            AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},PATCH_TARGET_ERROR,AddBehaviorScore method not found");
-            return null;
-        }
-
-        static void Prefix(object __instance, ref ValueTuple<AIBehaviorTuple, float> value)
-        {
-            // EARLY EXIT: Check if party logging is disabled
-            if (!AIComputationLogger.EnableDetailedPartyLogging)
-                return;
-
-            // Try to get the associated MobileParty from the PartyThinkParams instance
-            MobileParty party = GetMobilePartyFromThinkParams(__instance);
-
-            if (party?.LeaderHero == null)
-                return;
-
-            var behavior = value.Item1;
-            var originalScore = value.Item2;
-
-            // Add debug logging to see if the patch is being called
-            var heroName = party.LeaderHero?.Name?.ToString() ?? "Unknown";
-            var kingdomId = party.LeaderHero?.Clan?.Kingdom?.StringId ?? "None";
-
-            // Log every call to see if the patch is working
-            AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},PATCH_CALLED,{kingdomId},{heroName},{behavior},{originalScore:F2}");
-
-            // Apply enhanced AI scoring logic
-            var result = ApplyEnhancedAILogic(party, behavior, originalScore);
-
-            // Always log the result for debugging
-            AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},PATCH_RESULT,{kingdomId},{heroName},{behavior},{originalScore:F2},{result.modifiedScore:F2},\"{result.modifications}\"");
-
-            // Update the value tuple with the modified score
-            value = new ValueTuple<AIBehaviorTuple, float>(behavior, result.modifiedScore);
-        }
-
-        private static MobileParty GetMobilePartyFromThinkParams(object thinkParams)
-        {
-            if (thinkParams == null) return null;
-
-            try
+            finally
             {
-                var type = thinkParams.GetType();
-
-                // Based on the debug output, try the field "MobilePartyOf"
-                var mobilePartyOfField = type.GetField("MobilePartyOf");
-                if (mobilePartyOfField != null)
-                {
-                    var result = mobilePartyOfField.GetValue(thinkParams) as MobileParty;
-                    if (result != null)
-                    {
-                        AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},PARTY_FOUND,Successfully found MobileParty: {result.LeaderHero?.Name}");
-                        return result;
-                    }
-                }
-
-                // Fallback: Try other common property/field names
-                var partyProperty = type.GetProperty("Party") ?? type.GetProperty("MobileParty") ?? type.GetProperty("OwnerParty");
-                if (partyProperty != null)
-                {
-                    return partyProperty.GetValue(thinkParams) as MobileParty;
-                }
-
-                var partyField = type.GetField("Party") ?? type.GetField("MobileParty") ?? type.GetField("_party") ?? type.GetField("_mobileParty");
-                if (partyField != null)
-                {
-                    return partyField.GetValue(thinkParams) as MobileParty;
-                }
-
-                // Only log debug info if we couldn't find the party through MobilePartyOf
-                AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},THINK_PARAMS_DEBUG,MobilePartyOf field not found or returned null");
-
+                _isAddingFeastBehaviors = false;
             }
-            catch (Exception ex)
-            {
-                AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},THINK_PARAMS_ERROR,{ex.Message}");
-            }
-
-            return null;
         }
 
         private static (float modifiedScore, string modifications) ApplyEnhancedAILogic(MobileParty party, AIBehaviorTuple behavior, float originalScore)
@@ -219,7 +249,7 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
                         float threatLevel = CalculateSettlementThreatLevel(settlement, kingdom);
 
                         // Log threat assessment
-                        AIComputationLogger.LogSettlementThreatAssessment(settlement, kingdom, threatLevel, GetNearbyEnemyCount(settlement, kingdom));
+                        //AIComputationLogger.LogSettlementThreatAssessment(settlement, kingdom, threatLevel, GetNearbyEnemyCount(settlement, kingdom));
 
                         float defenseBonus = (threatLevel * 100f) / (1f + distance / 100f);
                         score += defenseBonus;
@@ -296,7 +326,7 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
                 }
 
                 // Log defensive analysis
-                AIComputationLogger.LogDefensiveBehaviorAnalysis(party, threatenedSettlements, alliedThreatenedSettlements, totalBonus);
+                //AIComputationLogger.LogDefensiveBehaviorAnalysis(party, threatenedSettlements, alliedThreatenedSettlements, totalBonus);
             }
 
             return (score, changes.ToString());
@@ -437,7 +467,7 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
                 }
 
                 // Log offensive analysis
-                AIComputationLogger.LogOffensiveBehaviorAnalysis(party, viableTargets, weakEnemyParties, totalBonus);
+                //AIComputationLogger.LogOffensiveBehaviorAnalysis(party, viableTargets, weakEnemyParties, totalBonus);
             }
 
             return (score, changes.ToString());
@@ -531,7 +561,7 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
             }
 
             // Log strategic positioning
-            AIComputationLogger.LogStrategicPositioning(party, isMultiFrontWar, nearBorder, withAllies, totalBonus);
+            //AIComputationLogger.LogStrategicPositioning(party, isMultiFrontWar, nearBorder, withAllies, totalBonus);
 
             return (score, changes.ToString());
         }
@@ -543,6 +573,7 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
             bool attendingFeast = false;
             bool kingdomFeasting = false;
             bool enemyFeasting = false;
+            bool isHost = false;
 
             if (FeastBehavior.Instance == null) return (score, "");
 
@@ -553,25 +584,163 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
                 if (feast != null)
                 {
                     attendingFeast = feast.lordsInFeast?.Contains(party.LeaderHero) == true;
-                    if (attendingFeast)
+                    isHost = feast.hostOfFeast == party.LeaderHero;
+
+                    // MASSIVE HOST PRIORITY: Host must ALWAYS prioritize staying at feast
+                    if (isHost)
                     {
-                        if (IsOffensiveBehavior(behavior))
+                        var behaviorType = behavior.AiBehavior;
+                        var behaviorTarget = behavior.Party;
+
+                        if (party.LeaderHero.CurrentSettlement != feast.feastSettlement)
                         {
-                            float reduction = score * 0.7f; // 70% reduction
-                            score *= 0.3f;
-                            totalImpact -= reduction;
-                            changes.Append($"AttendingFeast-{reduction:F1};");
+                            // Host is not at feast - MASSIVELY boost behaviors that go to feast settlement
+                            if (behaviorType == AiBehavior.GoToSettlement && behaviorTarget == feast.feastSettlement)
+                            {
+                                float hostReturnBonus = 20000f; // MASSIVE bonus for returning to feast
+                                score += hostReturnBonus;
+                                totalImpact += hostReturnBonus;
+                                changes.Append($"HostReturnToFeast+{hostReturnBonus:F0};");
+                            }
+                            else if (behaviorType == AiBehavior.GoToSettlement ||
+                                     behaviorType == AiBehavior.PatrolAroundPoint ||
+                                     behaviorType == AiBehavior.RaidSettlement ||
+                                     behaviorType == AiBehavior.BesiegeSettlement ||
+                                     behaviorType == AiBehavior.AssaultSettlement)
+                            {
+                                // MASSIVELY penalize any other movement behavior when host should return
+                                float hostPenalty = -15000f; // EXTREME penalty
+                                score += hostPenalty;
+                                totalImpact += hostPenalty;
+                                changes.Append($"HostMustReturnHome{hostPenalty:F0};");
+                            }
+                        }
+                        else
+                        {
+                            // Host is at feast - heavily boost staying behaviors
+                            if (behaviorType == AiBehavior.Hold)
+                            {
+                                float hostStayBonus = 15000f; // MASSIVE bonus for staying put
+                                score += hostStayBonus;
+                                totalImpact += hostStayBonus;
+                                changes.Append($"HostStayAtFeast+{hostStayBonus:F0};");
+                            }
+
+                            // MASSIVELY penalize ANY movement away from feast
+                            if (behaviorType == AiBehavior.GoToSettlement && behaviorTarget != feast.feastSettlement ||
+                                behaviorType == AiBehavior.RaidSettlement ||
+                                behaviorType == AiBehavior.BesiegeSettlement ||
+                                behaviorType == AiBehavior.AssaultSettlement ||
+                                behaviorType == AiBehavior.EngageParty ||
+                                behaviorType == AiBehavior.PatrolAroundPoint || // Penalize ANY patrol behavior
+                                behaviorType == AiBehavior.DefendSettlement) // Penalize defend during peacetime feast
+                            {
+                                float hostStayPenalty = -20000f; // EXTREME penalty for leaving
+                                score += hostStayPenalty;
+                                totalImpact += hostStayPenalty;
+                                changes.Append($"HostNoLeaveFeast{hostStayPenalty:F0};");
+                            }
                         }
                     }
-                    else if (IsDefensiveBehavior(behavior))
+                    // GUEST LOGIC (invited attendees who are not the host)
+                    else if (attendingFeast && !isHost)
                     {
-                        score += 40f;
-                        totalImpact += 40f;
-                        changes.Append("NotAttending+40;");
+                        var behaviorType = behavior.AiBehavior;
+                        var behaviorTarget = behavior.Party;
+
+                        if (party.LeaderHero.CurrentSettlement != feast.feastSettlement)
+                        {
+                            // Guest should attend feast
+                            if (behaviorType == AiBehavior.GoToSettlement && behaviorTarget == feast.feastSettlement)
+                            {
+                                float guestAttendBonus = 6000f;
+                                score += guestAttendBonus;
+                                totalImpact += guestAttendBonus;
+                                changes.Append($"GuestAttendFeast+{guestAttendBonus:F0};");
+                            }
+                            else if (behaviorType == AiBehavior.GoToSettlement ||
+                                     behaviorType == AiBehavior.RaidSettlement ||
+                                     behaviorType == AiBehavior.BesiegeSettlement)
+                            {
+                                // Moderate penalty for going elsewhere
+                                float guestPenalty = -3000f;
+                                score += guestPenalty;
+                                totalImpact += guestPenalty;
+                                changes.Append($"GuestShouldAttendFeast{guestPenalty:F0};");
+                            }
+                        }
+                        else
+                        {
+                            // Guest is at feast - boost staying behaviors
+                            if (behaviorType == AiBehavior.Hold ||
+                                (behaviorType == AiBehavior.PatrolAroundPoint && behaviorTarget == feast.feastSettlement))
+                            {
+                                float guestStayBonus = 3000f;
+                                score += guestStayBonus;
+                                totalImpact += guestStayBonus;
+                                changes.Append($"GuestStayAtFeast+{guestStayBonus:F0};");
+                            }
+
+                            // Penalty for leaving behaviors
+                            if (behaviorType == AiBehavior.GoToSettlement && behaviorTarget != feast.feastSettlement ||
+                                behaviorType == AiBehavior.RaidSettlement ||
+                                behaviorType == AiBehavior.BesiegeSettlement)
+                            {
+                                float guestLeavePenalty = -4000f;
+                                score += guestLeavePenalty;
+                                totalImpact += guestLeavePenalty;
+                                changes.Append($"GuestNoLeaveFeast{guestLeavePenalty:F0};");
+                            }
+                        }
+                    }
+                    // Lords not invited to the feast - slight defensive boost
+                    else if (!attendingFeast && !isHost && IsDefensiveBehavior(behavior))
+                    {
+                        score += 200f;
+                        totalImpact += 200f;
+                        changes.Append("NotInvited+200;");
+                    }
+                }
+            }
+            else
+            {
+                // NO ACTIVE FEAST: If lords are stuck at settlements, encourage leaving
+                if (party.LeaderHero.CurrentSettlement != null)
+                {
+                    // Check if they're at a settlement that used to have a feast
+                    bool wasFormerFeastLocation = FeastBehavior.Instance.Feasts.Any(f =>
+                        f.feastSettlement == party.LeaderHero.CurrentSettlement);
+
+                    if (!wasFormerFeastLocation)
+                    {
+                        var behaviorType = behavior.AiBehavior;
+
+                        // Encourage movement behaviors when no feast is active
+                        if (behaviorType == AiBehavior.GoToSettlement ||
+                            behaviorType == AiBehavior.PatrolAroundPoint ||
+                            behaviorType == AiBehavior.RaidSettlement ||
+                            behaviorType == AiBehavior.BesiegeSettlement)
+                        {
+                            float encourageMovement = 800f;
+                            score += encourageMovement;
+                            totalImpact += encourageMovement;
+                            changes.Append($"NoFeastMove+{encourageMovement:F0};");
+                        }
+
+                        // Penalize staying put when no feast
+                        if (behaviorType == AiBehavior.Hold ||
+                            behaviorType == AiBehavior.DefendSettlement)
+                        {
+                            float discourageStaying = -500f;
+                            score += discourageStaying;
+                            totalImpact += discourageStaying;
+                            changes.Append($"NoFeastStay{discourageStaying:F0};");
+                        }
                     }
                 }
             }
 
+            // Honor-based enemy feast considerations
             var enemies = FactionManager.GetEnemyKingdoms(kingdom);
             foreach (var enemy in enemies)
             {
@@ -581,16 +750,16 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
                     int honor = party.LeaderHero.GetTraitLevel(DefaultTraits.Honor);
                     if (honor > 0 && IsOffensiveBehavior(behavior))
                     {
-                        float penalty = honor * 15f;
+                        float penalty = honor * 100f;
                         score -= penalty;
                         totalImpact -= penalty;
-                        changes.Append($"HonorFeast-{penalty:F1};");
+                        changes.Append($"HonorEnemyFeast-{penalty:F1};");
                     }
                 }
             }
 
-            // Log feast behavior impact
-            AIComputationLogger.LogFeastBehaviorImpact(party, attendingFeast, kingdomFeasting, enemyFeasting, totalImpact);
+            // DISABLED: Log feast behavior impact for debugging - commenting out for performance
+            // AIComputationLogger.LogFeastBehaviorImpact(party, attendingFeast, kingdomFeasting, enemyFeasting, totalImpact);
 
             return (score, changes.ToString());
         }
@@ -651,7 +820,7 @@ namespace Diplomacy.War_Peace_AI_Overhaul.PartyPatches
             }
 
             // Log seasonal behavior impact
-            AIComputationLogger.LogSeasonalBehaviorImpact(party, seasonName, isOffensive, isDefensive, seasonalBonus);
+            //AIComputationLogger.LogSeasonalBehaviorImpact(party, seasonName, isOffensive, isDefensive, seasonalBonus);
 
             return (score, changes.ToString());
         }

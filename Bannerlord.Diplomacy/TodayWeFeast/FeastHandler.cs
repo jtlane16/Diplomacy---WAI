@@ -48,6 +48,12 @@ namespace TodayWeFeast
         [SaveableField(2)]
         public Dictionary<Kingdom, double> timeSinceLastFeast;
 
+        [SaveableField(5)] // Add a new saveable field
+        private bool _hasPerformedAICleanup = false;
+
+        [SaveableField(6)] // Add new field to track last cleanup
+        private double _lastCleanupDay = 0;
+
         public static FeastBehavior Instance { get; private set; } // Changed to property with private setter
 
         public FeastBehavior()
@@ -87,7 +93,9 @@ namespace TodayWeFeast
             dataStore.SyncData("Feasts", ref Feasts);
             dataStore.SyncData("timeSinceLastFeast", ref timeSinceLastFeast);
             dataStore.SyncData("talkedToLordsToday", ref _talkedToLordsToday);
-            dataStore.SyncData("lastTalkedToLords", ref _lastTalkedToLords); // Add new field to save data
+            dataStore.SyncData("lastTalkedToLords", ref _lastTalkedToLords);
+            dataStore.SyncData("hasPerformedAICleanup", ref _hasPerformedAICleanup);
+            dataStore.SyncData("lastCleanupDay", ref _lastCleanupDay); // Add new field to save data
         }
 
         private void RegisterFeastDialogs(CampaignGameStarter campaignGameStarter)
@@ -253,16 +261,63 @@ namespace TodayWeFeast
                         if (Mission.Current?.Scene != null)
                         {
                             int ambienceId = SoundEvent.GetEventIdFromString("event:/mission/ambient/area/interior/tavern");
-                            if (ambienceId != -1) { _ambienceLoop = SoundEvent.CreateEvent(ambienceId, Mission.Current.Scene); _ambienceLoop.Play(); }
+                            if (ambienceId != -1) 
+                            { 
+                                _ambienceLoop = SoundEvent.CreateEvent(ambienceId, Mission.Current.Scene); 
+                                _ambienceLoop.Play(); 
+                            }
 
                             int tavernTrackId = SoundEvent.GetEventIdFromString("event:/mission/ambient/detail/tavern_track_01");
-                            if (tavernTrackId != -1) { _tavernTrack = SoundEvent.CreateEvent(tavernTrackId, Mission.Current.Scene); _tavernTrack.Play(); }
+                            if (tavernTrackId != -1) 
+                            { 
+                                _tavernTrack = SoundEvent.CreateEvent(tavernTrackId, Mission.Current.Scene); 
+                                _tavernTrack.Play(); 
+                            }
 
+                            // ENHANCED: Better musician track handling
                             List<string> musicianTracks = GetMusicianTracksByCulture(currentFeast.kingdom.Culture);
-
-                            string randomTrack = musicianTracks[MBRandom.RandomInt(musicianTracks.Count)];
-                            int musicianTrackId = SoundEvent.GetEventIdFromString(randomTrack);
-                            if (musicianTrackId != -1) { _musicianTrack = SoundEvent.CreateEvent(musicianTrackId, Mission.Current.Scene); _musicianTrack.Play(); }
+                            
+                            // Try multiple tracks if the first one fails
+                            bool musicianTrackStarted = false;
+                            foreach (string trackToTry in musicianTracks)
+                            {
+                                int musicianTrackId = SoundEvent.GetEventIdFromString(trackToTry);
+                                if (musicianTrackId != -1) 
+                                { 
+                                    _musicianTrack = SoundEvent.CreateEvent(musicianTrackId, Mission.Current.Scene); 
+                                    if (_musicianTrack != null)
+                                    {
+                                        _musicianTrack.Play();
+                                        musicianTrackStarted = true;
+                                        // InformationManager.DisplayMessage(new InformationMessage($"Playing musician track: {trackToTry}", Colors.Green));
+                                        break;
+                                    }
+                                }
+                                // else
+                                // {
+                                //     InformationManager.DisplayMessage(new InformationMessage($"Failed to get event ID for: {trackToTry}", Colors.Red));
+                                // }
+                            }
+                            
+                            // If no culture-specific tracks worked, try a fallback
+                            if (!musicianTrackStarted)
+                            {
+                                string fallbackTrack = "event:/music/musicians/vlandia/01";
+                                int fallbackId = SoundEvent.GetEventIdFromString(fallbackTrack);
+                                if (fallbackId != -1)
+                                {
+                                    _musicianTrack = SoundEvent.CreateEvent(fallbackId, Mission.Current.Scene);
+                                    if (_musicianTrack != null)
+                                    {
+                                        _musicianTrack.Play();
+                                        // InformationManager.DisplayMessage(new InformationMessage($"Playing fallback musician track: {fallbackTrack}", Colors.Yellow));
+                                    }
+                                }
+                                // else
+                                // {
+                                //     InformationManager.DisplayMessage(new InformationMessage("Failed to start any musician track", Colors.Red));
+                                // }
+                            }
                         }
                     }
                 }
@@ -271,18 +326,72 @@ namespace TodayWeFeast
 
         private List<string> GetMusicianTracksByCulture(CultureObject culture)
         {
-            var defaultTracks = new List<string> { "event:/music/musicians/vlandia/01" };
-            if (culture == null) return defaultTracks;
+            // Always start with a fallback track
+            var tracks = new List<string> { "event:/music/musicians/vlandia/01" };
+            
+            if (culture == null) return tracks;
+            
             switch (culture.StringId.ToLower())
             {
-                case "aserai": return new List<string> { "event:/music/musicians/aserai/01", "event:/music/musicians/aserai/02", "event:/music/musicians/aserai/03", "event:/music/musicians/aserai/04" };
-                case "battania": return new List<string> { "event:/music/musicians/battania/01", "event:/music/musicians/battania/02", "event:/music/musicians/battania/03", "event:/music/musicians/battania/04" };
-                case "empire": return new List<string> { "event:/music/musicians/empire/01", "event:/music/musicians/empire/02", "event:/music/musicians/empire/03", "event:/music/musicians/empire/04" };
-                case "khuzait": return new List<string> { "event:/music/musicians/khuzait/01", "event:/music/musicians/khuzait/02", "event:/music/musicians/khuzait/03", "event:/music/musicians/khuzait/04" };
-                case "sturgia": return new List<string> { "event:/music/musicians/sturgia/01", "event:/music/musicians/sturgia/02", "event:/music/musicians/sturgia/03", "event:/music/musicians/sturgia/04" };
-                case "vlandia": return new List<string> { "event:/music/musicians/vlandia/01", "event:/music/musicians/vlandia/02", "event:/music/musicians/vlandia/03", "event:/music/musicians/vlandia/04" };
-                default: return defaultTracks;
+                case "aserai": 
+                    tracks = new List<string> { 
+                        "event:/music/musicians/aserai/01", 
+                        "event:/music/musicians/aserai/02", 
+                        "event:/music/musicians/aserai/03", 
+                        "event:/music/musicians/aserai/04",
+                        "event:/music/musicians/vlandia/01" // fallback
+                    };
+                    break;
+                case "battania": 
+                    tracks = new List<string> { 
+                        "event:/music/musicians/battania/01", 
+                        "event:/music/musicians/battania/02", 
+                        "event:/music/musicians/battania/03", 
+                        "event:/music/musicians/battania/04",
+                        "event:/music/musicians/vlandia/01" // fallback
+                    };
+                    break;
+                case "empire": 
+                    tracks = new List<string> { 
+                        "event:/music/musicians/empire/01", 
+                        "event:/music/musicians/empire/02", 
+                        "event:/music/musicians/empire/03", 
+                        "event:/music/musicians/empire/04",
+                        "event:/music/musicians/vlandia/01" // fallback
+                    };
+                    break;
+                case "khuzait": 
+                    tracks = new List<string> { 
+                        "event:/music/musicians/khuzait/01", 
+                        "event:/music/musicians/khuzait/02", 
+                        "event:/music/musicians/khuzait/03", 
+                        "event:/music/musicians/khuzait/04",
+                        "event:/music/musicians/vlandia/01" // fallback
+                    };
+                    break;
+                case "sturgia": 
+                    tracks = new List<string> { 
+                        "event:/music/musicians/sturgia/01", 
+                        "event:/music/musicians/sturgia/02", 
+                        "event:/music/musicians/sturgia/03", 
+                        "event:/music/musicians/sturgia/04",
+                        "event:/music/musicians/vlandia/01" // fallback
+                    };
+                    break;
+                case "vlandia": 
+                    tracks = new List<string> { 
+                        "event:/music/musicians/vlandia/01", 
+                        "event:/music/musicians/vlandia/02", 
+                        "event:/music/musicians/vlandia/03", 
+                        "event:/music/musicians/vlandia/04"
+                    };
+                    break;
+                default: 
+                    // Keep the default Vlandia track
+                    break;
             }
+            
+            return tracks;
         }
 
         private void OnMissionEnded(IMission mission) => StopFeastAmbientSound();
@@ -355,20 +464,14 @@ namespace TodayWeFeast
 
         private void OnDailyTick()
         {
-            // int dayCounter = 0;
-            // dayCounter++;
-
-            // if (dayCounter % 10 == 0) // Log every 10 days
-            // {
-            //     InformationManager.DisplayMessage(new InformationMessage($"Feast system: Daily tick {dayCounter}, {Feasts.Count} active feasts", Colors.Cyan));
-            // }
-
             _talkedToLordsToday.Clear();
-            foreach (FeastObject f in Feasts.ToList()) 
+
+            // ENHANCED: Run cleanup more frequently to catch newly stuck lords
+            PerformAICleanup();
+
+            foreach (FeastObject f in Feasts.ToList())
             {
                 f.dailyFeastTick();
-                
-                ProcessFeastAttendanceAI(f);
             }
 
             foreach (var kingdom in Kingdom.All.Where(k => !k.IsEliminated))
@@ -379,8 +482,6 @@ namespace TodayWeFeast
                 Hero bestHost = SelectBestFeastHost(kingdom);
                 if (bestHost != null)
                 {
-                    // InformationManager.DisplayMessage(new InformationMessage($"Feast system: {bestHost.Name} considering hosting a feast", Colors.Cyan));
-
                     var hostingDecision = ShouldHostFeast(bestHost, kingdom);
                     if (hostingDecision.shouldHost)
                     {
@@ -392,94 +493,70 @@ namespace TodayWeFeast
                             string reasonText = hostingDecision.primaryReason;
                             InformationManager.DisplayMessage(new InformationMessage($"{bestHost.Name} is hosting a feast at {bestHost.HomeSettlement.Name} {reasonText}!"));
                         }
-                        // else
-                        // {
-                        //     InformationManager.DisplayMessage(new InformationMessage($"Feast system: {bestHost.Name} wanted to host but insufficient food ({foodContribution:F1})", Colors.Red));
-                        // }
                     }
-                    // else
-                    // {
-                    //     InformationManager.DisplayMessage(new InformationMessage($"Feast system: {bestHost.Name} decided not to host (score too low)", Colors.Red));
-                    // }
                 }
             }
         }
 
-        private void ProcessFeastAttendanceAI(FeastObject feast)
+        private void PerformAICleanup()
         {
-            if (feast?.lordsInFeast == null) return;
+            // PERFORMANCE: Run cleanup less frequently during war, more frequently during peace
+            bool anyWarActive = Kingdom.All.Any(k => FactionManager.GetEnemyKingdoms(k).Any());
+            double cooldownHours = anyWarActive ? 6.0 : 1.0; // 6 hours during war, 1 hour during peace
 
-            // SPECIAL HANDLING FOR HOST - Make absolutely sure the host stays put
-            if (feast.hostOfFeast != Hero.MainHero && feast.hostOfFeast.PartyBelongedTo != null)
+            if (_hasPerformedAICleanup && (CampaignTime.Now.ToDays - _lastCleanupDay) < (cooldownHours / 24.0))
+                return;
+
+            int reenabledCount = 0;
+
+            // PERFORMANCE: Only check kingdoms that aren't at war for feast cleanup
+            var kingdomsToCheck = anyWarActive 
+                ? Kingdom.All.Where(k => !k.IsEliminated && !FactionManager.GetEnemyKingdoms(k).Any()).ToList()
+                : Kingdom.All.Where(k => !k.IsEliminated).ToList();
+
+            foreach (var kingdom in kingdomsToCheck)
             {
-                var hostParty = feast.hostOfFeast.PartyBelongedTo;
-
-                // Always enforce host AI restrictions
-                hostParty.Ai.SetDoNotMakeNewDecisions(true);
-
-                if (feast.hostOfFeast.CurrentSettlement != feast.feastSettlement)
+                foreach (var lord in kingdom.Lords)
                 {
-                    // Force the host back to the feast
-                    hostParty.Ai.SetMoveGoToSettlement(feast.feastSettlement);
-                    // InformationManager.DisplayMessage(new InformationMessage($"[FEAST] Host {feast.hostOfFeast.Name} ordered to return to {feast.feastSettlement.Name}", Colors.Red));
-                }
-            }
-
-            // Process guests as before
-            foreach (var invitedLord in feast.lordsInFeast.ToList())
-            {
-                // SKIP the host - they should never leave their own feast through this logic
-                if (invitedLord == Hero.MainHero ||
-                    invitedLord.PartyBelongedTo == null ||
-                    invitedLord == feast.hostOfFeast)
-                    continue;
-
-                var party = invitedLord.PartyBelongedTo;
-
-                // Check if they should travel to the feast
-                if (invitedLord.CurrentSettlement != feast.feastSettlement)
-                {
-                    var attendanceModel = new FeastAttendingScoringModel();
-                    var attendanceScore = attendanceModel.GetFeastAttendingScore(invitedLord, feast);
-
-                    if (attendanceScore.ResultNumber > 50f) // Threshold for traveling
+                    if (lord != Hero.MainHero && lord.PartyBelongedTo != null)
                     {
-                        // Use the existing API to set their destination
-                        party.Ai.SetMoveGoToSettlement(feast.feastSettlement);
-                        
-                        // Log the decision
-                        // AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_TRAVEL_INITIATED,{feast.kingdom.StringId},{invitedLord.Name},{feast.feastSettlement.Name},{attendanceScore.ResultNumber:F2}");
+                        // Check if their AI is disabled
+                        if (lord.PartyBelongedTo.Ai.DoNotMakeNewDecisions)
+                        {
+                            // Check if they're currently in an active feast
+                            bool currentlyInActiveFeast = Feasts.Any(f =>
+                                f.lordsInFeast.Contains(lord) &&
+                                lord.CurrentSettlement == f.feastSettlement);
+
+                            // If not currently in an active feast, re-enable their AI
+                            if (!currentlyInActiveFeast)
+                            {
+                                lord.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+                                reenabledCount++;
+                            }
+                        }
+
+                        // ADDITIONAL: Check for lords stuck at settlements where feasts have ended
+                        if (lord.CurrentSettlement != null)
+                        {
+                            // Check if this lord is stuck at a settlement that no longer has an active feast
+                            bool stuckAtOldFeastLocation = !Feasts.Any(f =>
+                                f.feastSettlement == lord.CurrentSettlement &&
+                                f.lordsInFeast.Contains(lord));
+
+                            if (stuckAtOldFeastLocation)
+                            {
+                                // Force AI re-enable and encourage them to leave
+                                lord.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
+                                reenabledCount++;
+                            }
+                        }
                     }
-                    else if (attendanceScore.ResultNumber < -50f)
-                    {
-                        // They don't want to attend - remove them from the feast AND re-enable their AI
-                        feast.lordsInFeast.Remove(invitedLord);
-                        party.Ai.SetDoNotMakeNewDecisions(false); // IMPORTANT: Re-enable AI for declining lords
-                        // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for declining lord {invitedLord.Name}", Colors.Orange));
-                        // AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_DECLINED,{feast.kingdom.StringId},{invitedLord.Name},{attendanceScore.ResultNumber:F2}");
-                    }
-                }
-                else
-                {
-                    // They're already at the feast - keep them there
-                    party.Ai.SetDoNotMakeNewDecisions(true);
                 }
             }
 
-            // Remove the lords who decided to leave.
-            foreach (var lord in feast.lordsInFeast.ToList())
-            {
-                if (lord.PartyBelongedTo != null)
-                {
-                    // IMPORTANT: Re-enable their AI so they can go about their business.
-                    lord.PartyBelongedTo.Ai.SetDoNotMakeNewDecisions(false);
-                    // InformationManager.DisplayMessage(new InformationMessage($"Re-enabled AI for departing lord {lord.Name}", Colors.Orange));
-                }
-                // TextObject message = new TextObject("{=leaving_feast_message}{LORD_NAME} has left the feast at {SETTLEMENT_NAME}.");
-                // message.SetTextVariable("LORD_NAME", lord.Name);
-                // message.SetTextVariable("SETTLEMENT_NAME", feast.feastSettlement.Name);
-                // MBInformationManager.AddQuickInformation(message);
-            }
+            _hasPerformedAICleanup = true;
+            _lastCleanupDay = CampaignTime.Now.ToDays;
         }
 
         private Hero SelectBestFeastHost(Kingdom kingdom)
@@ -705,6 +782,7 @@ namespace TodayWeFeast
             campaignGameSystemStarter.AddGameMenuOption("town_keep", "host_a_feast_town", "Host a feast (Cost: 5000 Gold)", game_menu_host_feast_on_condition, game_menu_host_feast_consequence, false, 4, false);
             campaignGameSystemStarter.AddGameMenuOption("town_keep", "manage_feast_inventory_town", "Manage feast inventory", game_menu_manage_feast_on_condition, game_menu_manage_feast_consequence, false, 5, false);
             campaignGameSystemStarter.AddGameMenuOption("town_keep", "end_feast_town", "End the feast", game_menu_end_feast_on_condition, game_menu_end_feast_consequence, false, 6, false);
+            
             campaignGameSystemStarter.AddGameMenuOption("castle", "host_a_feast_castle", "Host a feast (Cost: 5000 Gold)", game_menu_host_feast_on_condition, game_menu_host_feast_consequence, false, 4, false);
             campaignGameSystemStarter.AddGameMenuOption("castle", "manage_feast_inventory_castle", "Manage feast inventory", game_menu_manage_feast_on_condition, game_menu_manage_feast_consequence, false, 5, false);
             campaignGameSystemStarter.AddGameMenuOption("castle", "end_feast_castle", "End the feast", game_menu_end_feast_on_condition, game_menu_end_feast_consequence, false, 6, false);

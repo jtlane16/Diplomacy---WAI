@@ -18,6 +18,9 @@ namespace TodayWeFeast
                 return score;
             }
 
+            // Base desire to attend feast
+            score.Add(20f, new TextObject("Base social desire"));
+
             // Relationship with the host remains an important factor.
             float relation = hero.GetRelation(feast.hostOfFeast);
             score.Add(relation * 2.0f, new TextObject("Relation with Host"));
@@ -29,11 +32,21 @@ namespace TodayWeFeast
             int mercy = hero.GetTraitLevel(DefaultTraits.Mercy);
             score.Add(mercy * 5f, DefaultTraits.Mercy.Name);
 
-            // NEW: Penalty for feast duration. The longer it goes on, the more lords want to leave.
-            // The penalty starts after the third day and grows daily.
+            int generosity = hero.GetTraitLevel(DefaultTraits.Generosity);
+            score.Add(generosity * 8f, DefaultTraits.Generosity.Name);
+
+            // ENHANCED: More aggressive feast duration penalties
             if (feast.currentDay > 3)
             {
-                score.Add(-15f * (feast.currentDay - 3), new TextObject("Growing tired of the feast"));
+                float durationPenalty = -20f * (feast.currentDay - 3); // Increased from -15f
+                score.Add(durationPenalty, new TextObject("Growing tired of the feast"));
+            }
+
+            // ADDITIONAL: Stronger penalties for very long feasts
+            if (feast.currentDay > 7)
+            {
+                float extremePenalty = -30f * (feast.currentDay - 7);
+                score.Add(extremePenalty, new TextObject("Feast has gone on far too long"));
             }
 
             // Distance from the feast still matters if the lord is not yet present.

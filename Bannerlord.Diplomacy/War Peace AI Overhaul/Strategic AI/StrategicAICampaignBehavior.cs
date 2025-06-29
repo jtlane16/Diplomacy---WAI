@@ -81,6 +81,10 @@ namespace WarAndAiTweaks.AI.Behaviors
             kingdoms.Shuffle();
             bool warDeclaredThisTick = false;
 
+            // PERFORMANCE: Process fewer kingdoms per day during active wars
+            int maxKingdomsToProcess = kingdoms.Any(k => FactionManager.GetEnemyKingdoms(k).Any()) ? 2 : kingdoms.Count;
+            int processedCount = 0;
+
             var expiredPacts = new List<NonAggressionPact>();
             foreach (var pact in DiplomaticAgreementManager.NonAggressionPacts.ToList())
             {
@@ -103,10 +107,22 @@ namespace WarAndAiTweaks.AI.Behaviors
                     continue;
                 }
 
+                // PERFORMANCE: Skip processing if we've hit our limit
+                if (processedCount >= maxKingdomsToProcess)
+                {
+                    break;
+                }
+
                 var kingdomId = kingdom.StringId;
 
                 if (!_daysSinceLastThinkPerKingdom.ContainsKey(kingdomId)) _daysSinceLastThinkPerKingdom[kingdomId] = 0;
-                if (!_thinkIntervalPerKingdom.ContainsKey(kingdomId)) _thinkIntervalPerKingdom[kingdomId] = MBRandom.RandomInt(2, 4);
+                if (!_thinkIntervalPerKingdom.ContainsKey(kingdomId))
+                {
+                    // PERFORMANCE: Longer think intervals during war
+                    bool isAtWar = FactionManager.GetEnemyKingdoms(kingdom).Any();
+                    int interval = isAtWar ? MBRandom.RandomInt(3, 7) : MBRandom.RandomInt(2, 4);
+                    _thinkIntervalPerKingdom[kingdomId] = interval;
+                }
 
                 _daysSinceLastThinkPerKingdom[kingdomId]++;
 
@@ -116,9 +132,10 @@ namespace WarAndAiTweaks.AI.Behaviors
                 }
 
                 _daysSinceLastThinkPerKingdom[kingdomId] = 0;
-                _thinkIntervalPerKingdom[kingdomId] = MBRandom.RandomInt(2, 4);
 
+                // PERFORMANCE: Adjust next interval based on war status
                 bool atWar = FactionManager.GetEnemyKingdoms(kingdom).Any();
+                _thinkIntervalPerKingdom[kingdomId] = atWar ? MBRandom.RandomInt(3, 7) : MBRandom.RandomInt(2, 4);
 
                 if (!_peaceDays.ContainsKey(kingdomId)) _peaceDays[kingdomId] = 0;
                 if (!_warDays.ContainsKey(kingdomId)) _warDays[kingdomId] = 0;
@@ -156,6 +173,8 @@ namespace WarAndAiTweaks.AI.Behaviors
 
                 _peaceDays[kingdomId] = ai.DaysSinceLastWar;
                 _warDays[kingdomId] = ai.DaysAtWar;
+
+                processedCount++;
             }
         }
 

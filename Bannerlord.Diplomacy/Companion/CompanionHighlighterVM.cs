@@ -1,6 +1,6 @@
 ﻿using TaleWorlds.Library;
 
-namespace CompanionHighlighter
+namespace Diplomacy.Companion
 {
     public class CompanionHighlighterVM : ViewModel
     {

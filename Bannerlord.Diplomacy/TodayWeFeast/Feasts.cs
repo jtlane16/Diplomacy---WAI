@@ -12,7 +12,6 @@ using TaleWorlds.Library;
 using TaleWorlds.Localization;
 using TaleWorlds.SaveSystem;
 
-using WarAndAiTweaks.AI;
 
 namespace TodayWeFeast
 {
@@ -271,13 +270,10 @@ namespace TodayWeFeast
         }
 
         // ENHANCED: New method that works purely through AI scoring without disabling AI
+        // ENHANCED: New method that works purely through AI scoring without disabling AI
         private void ProcessFeastAttendanceAI()
         {
             if (this.lordsInFeast == null) return;
-
-            // DISABLED: Commented out logging to improve performance
-            // Log feast attendance status for debugging
-            // AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_ATTENDANCE_CHECK,{this.kingdom.StringId},{this.feastSettlement.Name},{this.hostOfFeast.Name},{this.lordsInFeast.Count},{this.currentDay}");
 
             foreach (var lord in this.lordsInFeast.ToList())
             {
@@ -286,10 +282,6 @@ namespace TodayWeFeast
                 var currentLocation = lord.CurrentSettlement?.Name?.ToString() ?? "traveling";
                 var isAtFeast = lord.CurrentSettlement == this.feastSettlement;
                 var isHost = lord == this.hostOfFeast;
-
-                // DISABLED: Commented out individual lord status logging
-                // Log each lord's status
-                // AIComputationLogger.WriteLine($"{DateTime.UtcNow:o},FEAST_LORD_STATUS,{this.kingdom.StringId},{lord.Name},{currentLocation},{isAtFeast},{isHost}");
 
                 // The actual scoring boost is handled in AIMilitaryBehaviorPatches.cs
                 // This method is mainly for logging and any additional feast logic

@@ -2,7 +2,7 @@
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 
-namespace CompanionHighlighter
+namespace Diplomacy.Companion
 {
     public class CompanionIconVM : ViewModel
     {

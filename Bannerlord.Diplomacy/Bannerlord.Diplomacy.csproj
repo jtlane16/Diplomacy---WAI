@@ -29,6 +29,9 @@
         <GameVersionConstant>v$(GameVersionFlat)</GameVersionConstant>
         <DefineConstants>$(DefineConstants);$(GameVersionConstant)</DefineConstants>
     </PropertyGroup>
+    <ItemGroup>
+      <Compile Remove="War Peace AI Overhaul\Logging\AIComputationLogger.cs" />
+    </ItemGroup>
 
     <!-- NuGet Packages -->
     <ItemGroup>
@@ -90,7 +93,7 @@
         </SubModuleOverrides>
     </ItemGroup>
     <ItemGroup>
-      <Folder Include="War Peace AI Overhaul\Military\" />
+      <Folder Include="War Peace AI Overhaul\Logging\" />
     </ItemGroup>
 
 </Project>

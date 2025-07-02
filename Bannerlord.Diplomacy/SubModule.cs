@@ -1,20 +1,18 @@
 ﻿using Bannerlord.UIExtenderEx;
-
-using CompanionHighlighter;
+using Diplomacy.Companion;
 
 using HarmonyLib;
 
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
 
 using TodayWeFeast;
 
-using WarAndAiTweaks.AI.Behaviors;
-using WarAndAiTweaks.DiplomaticAction;
+using WarAndAiTweaks.Strategic;
 using WarAndAiTweaks.Systems;
-using WarAndAiTweaks.AI;
 
 namespace WarAndAiTweaks
 {
@@ -31,11 +29,9 @@ namespace WarAndAiTweaks
             }
             catch (System.Exception e)
             {
-                // It's better to use the in-game logger for error messages
                 InformationManager.DisplayMessage(new InformationMessage($"War & AI Tweaks Harmony Error: {e.Message}", Colors.Red));
             }
 
-            // UIExtender will find and apply both your XML and C# mixins
             var extender = new UIExtender("WarAndAiTweaks.DiplomacyUI");
             extender.Register(typeof(SubModule).Assembly);
             extender.Enable();
@@ -47,12 +43,9 @@ namespace WarAndAiTweaks
             if (game.GameType is Campaign)
             {
                 var campaignStarter = (CampaignGameStarter) gameStarter;
-                campaignStarter.AddBehavior(new StrategicAICampaignBehavior());
-                campaignStarter.AddBehavior(new DiplomaticAgreementManager());
-                campaignStarter.AddBehavior(new InfamyManager());
                 campaignStarter.AddBehavior(new FeastBehavior());
                 campaignStarter.AddBehavior(new SettlementCultureChangerBehavior());
-                AIComputationLogger.ClearLog();
+                campaignStarter.AddBehavior(new StrategicConquestAI()); // RE-ENABLED
             }
         }
 

@@ -1,5 +1,4 @@
-﻿using Diplomacy.Extensions;
-
+﻿
 using JetBrains.Annotations;
 
 using System;
@@ -24,7 +23,6 @@ using TaleWorlds.Localization;
 using TaleWorlds.MountAndBlade;
 using TaleWorlds.SaveSystem;
 
-using WarAndAiTweaks.AI;
 
 namespace TodayWeFeast
 {
@@ -593,12 +591,6 @@ namespace TodayWeFeast
 
             var reasons = new List<(float weight, string reason)>();
 
-            if (HasRecentDiplomaticSuccess(kingdom))
-            {
-                score.Add(25f, new TextObject("Recent diplomatic success"));
-                reasons.Add((25f, "to celebrate recent diplomatic success"));
-            }
-
             if (IsKingdomProperous(kingdom))
             {
                 score.Add(20f, new TextObject("Kingdom prosperity"));
@@ -646,16 +638,7 @@ namespace TodayWeFeast
         {
             float bonus = 0f;
 
-            var recentAlliances = kingdom.GetAlliedKingdoms().Count();
-            if (recentAlliances > 0)
-            {
-                bonus += recentAlliances * 10f;
-            }
-
             var neighborKingdoms = Kingdom.All.Where(k => k != kingdom && !k.IsEliminated);
-            var goodRelations = neighborKingdoms.Count(k => kingdom.GetRelation(k) > 0);
-            bonus += goodRelations * 5f;
-
             return Math.Min(bonus, 25f);
         }
 
@@ -697,12 +680,6 @@ namespace TodayWeFeast
             }
 
             return bonus;
-        }
-
-        private bool HasRecentDiplomaticSuccess(Kingdom kingdom)
-        {
-            return kingdom.GetAlliedKingdoms().Any() ||
-                   (!FactionManager.GetEnemyKingdoms(kingdom).Any() && timeSinceLastFeast.ContainsKey(kingdom));
         }
 
         private bool IsKingdomProperous(Kingdom kingdom)

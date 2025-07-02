@@ -4,11 +4,9 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.SaveSystem;
 
 using TodayWeFeast;
-
-using WarAndAiTweaks;
-using WarAndAiTweaks.AI.Behaviors;
-using WarAndAiTweaks.AI.Goals;
-using WarAndAiTweaks.DiplomaticAction;
+using WarAndAiTweaks.Strategic;
+using WarAndAiTweaks.Strategic.Scoring;
+using WarAndAiTweaks.Strategic.Diplomacy;
 
 public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
 {
@@ -16,30 +14,45 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
 
     protected override void DefineClassTypes()
     {
-        AddClassDefinition(typeof(StrategicAICampaignBehavior), 1);
-        AddClassDefinition(typeof(DiplomaticAgreementManager), 2);
-        AddClassDefinition(typeof(Alliance), 3);
-        AddClassDefinition(typeof(NonAggressionPact), 4);
-        AddClassDefinition(typeof(DiplomaticAgreement), 5);
-        AddClassDefinition(typeof(InfamyManager), 6); // Add this line
+        // Feast system classes
         AddClassDefinition(typeof(FeastObject), 2137782638);
         AddClassDefinition(typeof(FeastBehavior), 2137782639);
+
+        // Strategic AI classes
+        AddClassDefinition(typeof(RunawayThreatData), 2137782640);
+        AddClassDefinition(typeof(PeaceProposal), 2137782641);
+        AddClassDefinition(typeof(ConquestStrategy), 2137782642);
+
+        // NEW: Simple record classes instead of nested dictionaries
+        AddClassDefinition(typeof(WarRecord), 2137782643);
+        AddClassDefinition(typeof(PeaceOfferRecord), 2137782644);
     }
 
     protected override void DefineContainerDefinitions()
     {
-        ConstructContainerDefinition(typeof(List<Alliance>));
-        ConstructContainerDefinition(typeof(List<NonAggressionPact>));
-        ConstructContainerDefinition(typeof(Dictionary<string, int>));
-        ConstructContainerDefinition(typeof(Dictionary<string, StrategicState>));
-        ConstructContainerDefinition(typeof(Dictionary<string, CampaignTime>));
-        ConstructContainerDefinition(typeof(Dictionary<Kingdom, float>)); // Add this line
+        // Basic containers
+        ConstructContainerDefinition(typeof(List<Hero>));
+        ConstructContainerDefinition(typeof(List<Kingdom>));
         ConstructContainerDefinition(typeof(List<FeastObject>));
+
+        // Basic dictionaries
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, double>));
+        ConstructContainerDefinition(typeof(Dictionary<Hero, CampaignTime>));
+        ConstructContainerDefinition(typeof(Dictionary<Kingdom, float>));
+        ConstructContainerDefinition(typeof(Dictionary<Kingdom, CampaignTime>));
+
+        // Strategic AI containers - simple lists instead of nested dictionaries
+        ConstructContainerDefinition(typeof(Dictionary<Kingdom, RunawayThreatData>));
+        ConstructContainerDefinition(typeof(Dictionary<Kingdom, ConquestStrategy>));
+        ConstructContainerDefinition(typeof(List<PeaceProposal>));
+        ConstructContainerDefinition(typeof(List<WarRecord>));
+        ConstructContainerDefinition(typeof(List<PeaceOfferRecord>));
+
+        // REMOVED: All nested dictionaries that were causing crashes
     }
 
     protected override void DefineEnumTypes()
     {
-        AddEnumDefinition(typeof(StrategicState), 10);
+        // No enums needed
     }
 }

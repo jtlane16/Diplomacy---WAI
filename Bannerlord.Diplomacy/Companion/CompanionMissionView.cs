@@ -11,7 +11,7 @@ using TaleWorlds.MountAndBlade;
 using TaleWorlds.MountAndBlade.View;
 using TaleWorlds.MountAndBlade.View.MissionViews;
 
-namespace CompanionHighlighter
+namespace Diplomacy.Companion
 {
     [DefaultView]
     public class CompanionMissionView : MissionView
@@ -22,17 +22,15 @@ namespace CompanionHighlighter
         private bool _isInitialized = false;
         private Camera _camera;
 
-       public override void OnBehaviorInitialize()
-		{
-			if (base.Mission != null)
-			{
-				MissionMode mode = base.Mission.Mode;
-				if (mode == MissionMode.Battle || mode == MissionMode.Deployment || mode <= MissionMode.StartUp)
-                {
-                    base.OnBehaviorInitialize();
-                }
-			}
-		}
+        public override void OnBehaviorInitialize()
+        {
+            if (Mission?.Mode == MissionMode.Battle || 
+                Mission?.Mode == MissionMode.Deployment || 
+                Mission?.Mode == MissionMode.StartUp)
+            {
+                base.OnBehaviorInitialize();
+            }
+        }
 
         public override void OnMissionScreenTick(float dt)
         {

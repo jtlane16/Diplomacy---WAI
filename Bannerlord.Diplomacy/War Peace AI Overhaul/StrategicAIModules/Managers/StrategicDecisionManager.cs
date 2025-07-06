@@ -30,20 +30,43 @@ namespace WarAndAiTweaks.Strategic.Decision
 
         public bool ShouldConsiderPeace(Kingdom kingdom, ConquestStrategy strategy)
         {
-            var activeWars = FactionManager.GetEnemyKingdoms(kingdom).Count();
-            if (activeWars == 0) return false;
+            try
+            {
+                // Add null safety checks
+                if (kingdom == null || kingdom.IsEliminated || strategy == null)
+                    return false;
 
-            int warLimit = _runawayAnalyzer.GetRecommendedWarLimit(kingdom);
-            if (activeWars > warLimit) return true;
+                var currentEnemies = FactionManager.GetEnemyKingdoms(kingdom);
+                if (currentEnemies == null)
+                    return false;
 
-            float enemyStrength = FactionManager.GetEnemyKingdoms(kingdom).Sum(k => k.TotalStrength);
-            float ownStrength = kingdom.TotalStrength;
-            if (enemyStrength > ownStrength * 1.5f) return true;
+                var enemyCount = currentEnemies.Where(k => k != null && !k.IsEliminated).Count();
+                if (enemyCount == 0)
+                    return false;
 
-            if (strategy.HasRecentTerritorialLosses()) return true;
-            if (strategy.HasBetterExpansionTargets()) return true;
+                var recommendedWarLimit = _runawayAnalyzer.GetRecommendedWarLimit(kingdom);
+                if (enemyCount > recommendedWarLimit)
+                    return true;
 
-            return false;
+                var validEnemies = currentEnemies.Where(k => k != null && !k.IsEliminated).ToList();
+                var totalEnemyStrength = validEnemies.Sum(k => k.TotalStrength);
+                var kingdomStrength = kingdom.TotalStrength;
+
+                if (totalEnemyStrength > kingdomStrength * 1.5f)
+                    return true;
+
+                if (strategy.HasBetterExpansionTargets())
+                    return true;
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"[Debug] Error in ShouldConsiderPeace for {kingdom?.Name}: {ex.Message}",
+                    Colors.Yellow));
+                return false;
+            }
         }
 
         public bool ShouldConsiderWar(Kingdom kingdom, ConquestStrategy strategy)
@@ -118,26 +141,47 @@ namespace WarAndAiTweaks.Strategic.Decision
 
         public void ConsiderPeaceDecisions(Kingdom kingdom, ConquestStrategy strategy)
         {
-            var enemies = FactionManager.GetEnemyKingdoms(kingdom).ToList();
-            if (!enemies.Any()) return;
+            // FIXED: Add comprehensive null safety checks
+            if (kingdom == null || kingdom.IsEliminated || strategy == null)
+                return;
+
+            var enemies = FactionManager.GetEnemyKingdoms(kingdom)?.ToList();
+            if (enemies == null || !enemies.Any()) return;
 
             _peaceManager.CheckForPendingPeaceProposals(kingdom, strategy);
 
-            var peaceCandidates = enemies
-                .Where(enemy => !_peaceManager.HasActivePeaceProposal(kingdom, enemy) &&
-                               !_peaceManager.HasRecentPeaceOffer(kingdom, enemy))
-                .Select(enemy => new
-                {
-                    Kingdom = enemy,
-                    Priority = _peaceScorer.CalculatePeacePriority(kingdom, enemy, strategy)
-                })
-                .OrderByDescending(x => x.Priority)
-                .ToList();
+            var peaceCandidates = new List<(Kingdom Kingdom, float Priority)>();
 
-            var bestPeaceTarget = peaceCandidates.FirstOrDefault();
+            // FIXED: Use safe iteration with explicit null checks
+            foreach (var enemy in enemies)
+            {
+                // PERF: Comprehensive validation before processing
+                if (enemy == null || enemy.IsEliminated || enemy == kingdom ||
+                    _peaceManager.HasActivePeaceProposal(kingdom, enemy) ||
+                    _peaceManager.HasRecentPeaceOffer(kingdom, enemy))
+                    continue;
+
+                try
+                {
+                    float priority = _peaceScorer.CalculatePeacePriority(kingdom, enemy, strategy);
+                    peaceCandidates.Add((enemy, priority));
+                }
+                catch (Exception ex)
+                {
+                    // PERF: Log and continue instead of crashing
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"[Debug] Peace calculation error for {kingdom?.Name} vs {enemy?.Name}: {ex.Message}",
+                        Colors.Yellow));
+                    continue;
+                }
+            }
+
+            if (!peaceCandidates.Any()) return;
+
+            var bestPeaceTarget = peaceCandidates.OrderByDescending(x => x.Priority).FirstOrDefault();
             float peaceThreshold = _peaceScorer.CalculatePeaceThreshold(kingdom);
 
-            if (bestPeaceTarget?.Priority > peaceThreshold)
+            if (bestPeaceTarget.Priority > peaceThreshold)
             {
                 int tributeAmount = CalculatePeaceTribute(kingdom, bestPeaceTarget.Kingdom);
                 _peaceManager.InitiatePeaceProposal(kingdom, bestPeaceTarget.Kingdom, tributeAmount);
@@ -202,7 +246,11 @@ namespace WarAndAiTweaks.Strategic.Decision
 
         private int CalculatePeaceTribute(Kingdom kingdom, Kingdom enemy)
         {
-            float strengthRatio = enemy.TotalStrength / kingdom.TotalStrength;
+            // Add null safety checks
+            if (kingdom == null || enemy == null)
+                return 0;
+
+            float strengthRatio = enemy.TotalStrength / Math.Max(kingdom.TotalStrength, 1f); // Prevent division by zero
 
             if (strengthRatio > 1.2f)
             {

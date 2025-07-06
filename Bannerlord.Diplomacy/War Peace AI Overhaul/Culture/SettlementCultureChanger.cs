@@ -24,13 +24,13 @@ namespace WarAndAiTweaks.Systems
             foreach (Settlement settlement in Settlement.All.Where(x => x.IsCastle || x.IsTown))
             {
                 // We only care about Towns and Castles that have an owner.
-                if (settlement.OwnerClan != null)
+                if (settlement.OwnerClan != null && settlement.OwnerClan.Kingdom != null && settlement.OwnerClan.Kingdom.Culture != null && settlement.Culture != null)
                 {
                     // Get the culture of the clan that owns the settlement.
                     var ownerCulture = settlement.OwnerClan.Kingdom.Culture;
 
                     // If the settlement's culture is already the same as the owner's, do nothing.
-                    if (settlement.Culture == ownerCulture)
+                    if ( settlement.Culture == ownerCulture)
                     {
                         continue;
                     }

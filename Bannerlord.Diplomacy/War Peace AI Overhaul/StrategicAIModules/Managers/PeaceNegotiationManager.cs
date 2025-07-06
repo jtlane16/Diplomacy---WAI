@@ -28,7 +28,7 @@ namespace WarAndAiTweaks.Strategic.Diplomacy
         public PeaceOfferRecord() { }
 
         public PeaceOfferRecord(Kingdom proposer, Kingdom target, CampaignTime offerTime)
-        {
+        { 
             Proposer = proposer;
             Target = target;
             OfferTime = offerTime;
@@ -86,7 +86,8 @@ namespace WarAndAiTweaks.Strategic.Diplomacy
 
         public void InitiatePeaceProposal(Kingdom proposer, Kingdom target, int tributeAmount)
         {
-            if (target == Hero.MainHero.MapFaction)
+            // FIXED: Check if target kingdom ruler is the player, not just any player faction member
+            if (target.RulingClan?.Leader == Hero.MainHero)
             {
                 InitiatePlayerPeaceProposal(proposer, target, tributeAmount);
                 return;

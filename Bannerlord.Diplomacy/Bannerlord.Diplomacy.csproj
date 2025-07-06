@@ -31,6 +31,7 @@
     </PropertyGroup>
     <ItemGroup>
       <Compile Remove="War Peace AI Overhaul\Logging\AIComputationLogger.cs" />
+      <Compile Remove="War Peace AI Overhaul\StrategicAIModules\old.cs" />
     </ItemGroup>
 
     <!-- NuGet Packages -->

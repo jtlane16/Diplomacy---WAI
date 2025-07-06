@@ -48,6 +48,11 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         ConstructContainerDefinition(typeof(List<WarRecord>));
         ConstructContainerDefinition(typeof(List<PeaceOfferRecord>));
 
+        // Add missing container definitions that might be needed
+        ConstructContainerDefinition(typeof(List<int>));
+        ConstructContainerDefinition(typeof(Dictionary<Kingdom, List<int>>));
+        ConstructContainerDefinition(typeof(Dictionary<Kingdom, Dictionary<Kingdom, float>>));
+
         // REMOVED: All nested dictionaries that were causing crashes
     }
 

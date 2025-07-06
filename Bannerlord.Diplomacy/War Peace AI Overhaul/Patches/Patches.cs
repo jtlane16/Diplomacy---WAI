@@ -115,6 +115,7 @@ namespace Diplomacy.War_Peace_AI_Overhaul
             }
 
             // Main patch method
+            // Main patch method
             public static bool Prefix(KingdomWarItemVM item)
             {
                 var playerKingdom = Hero.MainHero.Clan.Kingdom;
@@ -122,6 +123,15 @@ namespace Diplomacy.War_Peace_AI_Overhaul
 
                 if (playerKingdom == null || targetKingdom == null)
                     return true; // Allow if we can't determine kingdoms
+
+                // FIXED: Only allow peace negotiations if player is the kingdom ruler
+                if (playerKingdom.RulingClan?.Leader != Hero.MainHero)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        "Only the kingdom ruler can negotiate peace agreements.",
+                        Colors.Red));
+                    return false; // Block peace attempt for vassals
+                }
 
                 // Special case: If player kingdom is the target, check if the other faction wants peace
                 var aiKingdom = (item.Faction1 as Kingdom == playerKingdom) ? targetKingdom : (item.Faction1 as Kingdom);
@@ -255,16 +265,6 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                 {
                     __result = (int) (__result * 0.5f); // Reduce garrison wages by 50%
                 }
-            }
-        }
-
-        [HarmonyPatch(typeof(AiMilitaryBehavior), "RegisterEvents")]
-        public class Patch_DisableDefaultAIWarLogic
-        {
-            private static bool Prefix()
-            {
-                InformationManager.DisplayMessage(new InformationMessage("blocking default military logic"));
-                return false; // Completely disable the original method
             }
         }
     }

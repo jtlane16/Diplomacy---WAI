@@ -1,10 +1,15 @@
 ﻿using Bannerlord.UIExtenderEx;
+
 using Diplomacy.Companion;
 
 using HarmonyLib;
 
+using System;
+
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;

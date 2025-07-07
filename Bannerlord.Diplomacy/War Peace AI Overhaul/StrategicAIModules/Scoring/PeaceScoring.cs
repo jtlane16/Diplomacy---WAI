@@ -79,13 +79,12 @@ namespace WarAndAiTweaks.Strategic.Scoring
 
             float strengthRatio = enemy.TotalStrength / Math.Max(kingdom.TotalStrength, 1f);
 
-            // Higher priority to make peace with much stronger enemies
-            if (strengthRatio >= 2.5f) return 35f; // Overwhelming enemy
-            if (strengthRatio >= 2.0f) return 25f; // Very strong enemy
-            if (strengthRatio >= 1.5f) return 15f; // Strong enemy
-            if (strengthRatio >= 1.2f) return 8f;  // Somewhat stronger
+            // FIXED: Scale strength disparity smoothly instead of hard thresholds
+            if (strengthRatio <= 1.1f) return 0f; // Roughly equal strength
 
-            return 0f;
+            // Scale from 1.1x to 3.0x enemy strength = 0 to 40 points
+            float scaledRatio = Math.Min((strengthRatio - 1.1f) / 1.9f, 1f); // 0-1 scale
+            return scaledRatio * 40f; // 0-40 points
         }
 
         private float CalculateTerritorialLossScore(Kingdom kingdom, Kingdom enemy, ConquestStrategy strategy)
@@ -127,12 +126,15 @@ namespace WarAndAiTweaks.Strategic.Scoring
 
                 int activeWars = enemyKingdoms.Where(k => k != null && !k.IsEliminated).Count();
 
-                // Exponential pressure from multiple wars
-                if (activeWars >= 4) return 40f; // Overwhelming
-                if (activeWars >= 3) return 25f; // Very high pressure
-                if (activeWars >= 2) return 12f; // High pressure
+                // FIXED: Smooth scaling instead of hard thresholds
+                // Scale wars: 1 war = 0 pressure, 2 wars = 12 points, 3+ wars = exponential growth
+                if (activeWars <= 1) return 0f;
 
-                return 0f;
+                float baseScore = (activeWars - 1) * 12f; // 12 points per additional war
+                float exponentialMultiplier = MathF.Pow(1.4f, activeWars - 2); // Exponential growth for 3+ wars
+
+                return Math.Min(baseScore * exponentialMultiplier, 50f); // Cap at 50 points
+
             }
             catch (Exception ex)
             {
@@ -174,13 +176,15 @@ namespace WarAndAiTweaks.Strategic.Scoring
         {
             if (enemy == null || enemy.IsEliminated) return 0f;
 
-            // STRONG penalty for making peace with nearly defeated enemies
-            if (enemy.Fiefs?.Count <= 1) return -60f; // Don't let them escape!
-            if (enemy.Fiefs?.Count <= 2) return -40f; // Almost finished
-            if (enemy.Fiefs?.Count <= 3) return -25f; // Very weak
-            if (enemy.Fiefs?.Count <= 5) return -15f; // Weak
+            int fiefCount = enemy.Fiefs?.Count ?? 0;
+            if (fiefCount == 0) return 0f;
 
-            return 0f;
+            // FIXED: Scale elimination resistance smoothly
+            // More fiefs = stronger resistance to making peace
+            float fiefRatio = Math.Min(fiefCount / 8f, 1f); // Scale 0-8 fiefs to 0-1
+            float resistanceScore = (1f - fiefRatio) * -60f; // Invert: fewer fiefs = more negative score
+
+            return resistanceScore;
         }
 
         private float CalculateGeographicalPositioningScore(Kingdom kingdom, Kingdom enemy, ConquestStrategy strategy)

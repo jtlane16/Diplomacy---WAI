@@ -260,7 +260,7 @@ namespace WarAndAiTweaks.Strategic
             DaysAsHighThreat = 0;
             EstimatedGrowthRate = 0f;
             LastUpdate = CampaignTime.Now;
-            PreviousFiefCount = kingdom.Fiefs.Count;
+            PreviousFiefCount = kingdom?.Fiefs?.Count ?? 0;
         }
 
         // Parameterless constructor for SaveSystem
@@ -287,7 +287,7 @@ namespace WarAndAiTweaks.Strategic
             }
 
             // Update growth rate estimation
-            int currentFiefs = Kingdom.Fiefs.Count;
+            int currentFiefs = Kingdom?.Fiefs?.Count ?? 0;
             if (currentFiefs > PreviousFiefCount)
             {
                 float growthRate = (float) (currentFiefs - PreviousFiefCount) / (float) Math.Max(PreviousFiefCount, 1);

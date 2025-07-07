@@ -51,6 +51,8 @@ namespace WarAndAiTweaks
                 campaignStarter.AddBehavior(new FeastBehavior());
                 campaignStarter.AddBehavior(new SettlementCultureChangerBehavior());
                 campaignStarter.AddBehavior(new StrategicConquestAI()); // RE-ENABLED
+                campaignStarter.AddBehavior(new EnhancedAiMilitaryBehavior());
+                campaignStarter.AddBehavior(new ArmyCoordinationManager());
             }
         }
 

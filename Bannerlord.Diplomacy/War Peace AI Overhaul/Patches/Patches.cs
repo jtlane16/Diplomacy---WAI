@@ -267,5 +267,13 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                 }
             }
         }
+        [HarmonyPatch(typeof(AiMilitaryBehavior), "RegisterEvents")]
+        public class RegisterEvents
+        {
+            public static bool Prefix()
+            {
+                return false; // Prevent the original method from executing
+            }
+        }
     }
 }

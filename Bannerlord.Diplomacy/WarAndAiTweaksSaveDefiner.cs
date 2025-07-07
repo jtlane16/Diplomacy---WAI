@@ -1,6 +1,8 @@
 ﻿using System.Collections.Generic;
 
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.SaveSystem;
 
 using TodayWeFeast;
@@ -23,9 +25,12 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         AddClassDefinition(typeof(PeaceProposal), 2137782641);
         AddClassDefinition(typeof(ConquestStrategy), 2137782642);
 
-        // NEW: Simple record classes instead of nested dictionaries
+        // Simple record classes instead of nested dictionaries
         AddClassDefinition(typeof(WarRecord), 2137782643);
         AddClassDefinition(typeof(PeaceOfferRecord), 2137782644);
+
+        // NEW: Simplified strategic objective class
+        AddClassDefinition(typeof(TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors.ArmyCoordinationManager.StrategicObjective), 2137782648);
     }
 
     protected override void DefineContainerDefinitions()
@@ -51,13 +56,17 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         // Add missing container definitions that might be needed
         ConstructContainerDefinition(typeof(List<int>));
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, List<int>>));
-        ConstructContainerDefinition(typeof(Dictionary<Kingdom, Dictionary<Kingdom, float>>));
 
-        // REMOVED: All nested dictionaries that were causing crashes
+        // UPDATED: Simplified strategic objective containers
+        ConstructContainerDefinition(typeof(List<Army>));
+        ConstructContainerDefinition(typeof(List<TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors.ArmyCoordinationManager.StrategicObjective>));
+        ConstructContainerDefinition(typeof(Dictionary<IFaction, List<TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors.ArmyCoordinationManager.StrategicObjective>>));
+        ConstructContainerDefinition(typeof(Dictionary<IFaction, CampaignTime>));
     }
 
     protected override void DefineEnumTypes()
     {
-        // No enums needed
+        // NEW: Simplified strategic objective enum
+        AddEnumDefinition(typeof(TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors.ArmyCoordinationManager.ObjectiveType), 2137782649);
     }
 }

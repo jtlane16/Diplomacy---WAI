@@ -1,20 +1,24 @@
 ﻿using HarmonyLib;
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
 using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.CampaignSystem.GameComponents;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Settlements.Buildings;
 using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
+using TaleWorlds.Core;
 using TaleWorlds.Library;
 
 using WarAndAiTweaks.Strategic;
+using WarAndAiTweaks.Strategic.Marshal;
 using WarAndAiTweaks.Strategic.Scoring;
 
 namespace Diplomacy.War_Peace_AI_Overhaul
@@ -268,11 +272,11 @@ namespace Diplomacy.War_Peace_AI_Overhaul
             }
         }
         [HarmonyPatch(typeof(AiMilitaryBehavior), "RegisterEvents")]
-        public class RegisterEvents
+        public class Patch_DisableAiMilitaryBehavior
         {
             public static bool Prefix()
             {
-                return false; // Prevent the original method from executing
+                return false;
             }
         }
     }

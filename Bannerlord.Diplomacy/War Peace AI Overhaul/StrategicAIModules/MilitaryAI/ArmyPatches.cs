@@ -4,6 +4,7 @@ using System;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
 
 [HarmonyPatch(typeof(PartyThinkParams), "AddBehaviorScore")]
 public class AIChasePreventionPatch

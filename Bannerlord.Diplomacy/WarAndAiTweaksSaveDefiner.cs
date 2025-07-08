@@ -29,8 +29,6 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         AddClassDefinition(typeof(WarRecord), 2137782643);
         AddClassDefinition(typeof(PeaceOfferRecord), 2137782644);
 
-        // NEW: Simplified strategic objective class
-        AddClassDefinition(typeof(TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors.ArmyCoordinationManager.StrategicObjective), 2137782648);
     }
 
     protected override void DefineContainerDefinitions()
@@ -45,6 +43,7 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         ConstructContainerDefinition(typeof(Dictionary<Hero, CampaignTime>));
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, float>));
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, CampaignTime>));
+        ConstructContainerDefinition(typeof(Dictionary<Kingdom, Hero>));
 
         // Strategic AI containers - simple lists instead of nested dictionaries
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, RunawayThreatData>));
@@ -59,14 +58,6 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
 
         // UPDATED: Simplified strategic objective containers
         ConstructContainerDefinition(typeof(List<Army>));
-        ConstructContainerDefinition(typeof(List<TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors.ArmyCoordinationManager.StrategicObjective>));
-        ConstructContainerDefinition(typeof(Dictionary<IFaction, List<TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors.ArmyCoordinationManager.StrategicObjective>>));
         ConstructContainerDefinition(typeof(Dictionary<IFaction, CampaignTime>));
-    }
-
-    protected override void DefineEnumTypes()
-    {
-        // NEW: Simplified strategic objective enum
-        AddEnumDefinition(typeof(TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors.ArmyCoordinationManager.ObjectiveType), 2137782649);
     }
 }

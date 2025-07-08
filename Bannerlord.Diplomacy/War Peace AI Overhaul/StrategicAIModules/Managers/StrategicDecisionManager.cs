@@ -1,14 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.BarterSystem.Barterables;
 using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 
 using WarAndAiTweaks.Strategic; // Add this for ConquestStrategy
-using WarAndAiTweaks.Strategic.Scoring;
 using WarAndAiTweaks.Strategic.Diplomacy;
+using WarAndAiTweaks.Strategic.Scoring;
 
 namespace WarAndAiTweaks.Strategic.Decision
 {
@@ -244,24 +246,36 @@ namespace WarAndAiTweaks.Strategic.Decision
             }
         }
 
-        private int CalculatePeaceTribute(Kingdom kingdom, Kingdom enemy)
+        public int CalculatePeaceTribute(Kingdom kingdom, Kingdom enemy)
         {
-            // Add null safety checks
             if (kingdom == null || enemy == null)
                 return 0;
 
-            float strengthRatio = enemy.TotalStrength / Math.Max(kingdom.TotalStrength, 1f); // Prevent division by zero
+            var clan = kingdom.RulingClan;
+            var otherClan = enemy.RulingClan;
 
-            if (strengthRatio > 1.2f)
-            {
-                int baseAmount = (int) (strengthRatio * 500f);
-                return Math.Min(baseAmount, 2000);
-            }
-            else
-            {
-                int demandAmount = (int) ((2f - strengthRatio) * 300f);
-                return -Math.Max(demandAmount, 0);
-            }
+            // Use PeaceBarterable to get the value for the other faction
+            int value = -new PeaceBarterable(clan.Leader, kingdom, enemy, CampaignTime.Years(1f)).GetValueForFaction(enemy);
+
+            // Clamp value to 0 if between -5000 and 5000 (as in base game)
+            if (value > -5000 && value < 5000)
+                value = 0;
+
+            // Get daily tribute for the value
+            int dailyTribute = Campaign.Current.Models.DiplomacyModel.GetDailyTributeForValue(value);
+
+            // Optionally, multiply by 10 for a lump sum
+            int lumpSum = dailyTribute * 10;
+
+            // Clamp to a reasonable range
+            return Clamp(lumpSum, -5000, 5000);
+        }
+
+        private static int Clamp(int value, int min, int max)
+        {
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
         }
     }
 }

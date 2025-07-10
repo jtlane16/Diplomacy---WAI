@@ -30,7 +30,14 @@
         <DefineConstants>$(DefineConstants);$(GameVersionConstant)</DefineConstants>
     </PropertyGroup>
     <ItemGroup>
-      <Compile Remove="War Peace AI Overhaul\Logging\AIComputationLogger.cs" />
+      <Compile Remove="TodayWeFeast\**" />
+      <Compile Remove="War Peace AI Overhaul\Logging\**" />
+      <EmbeddedResource Remove="TodayWeFeast\**" />
+      <EmbeddedResource Remove="War Peace AI Overhaul\Logging\**" />
+      <None Remove="TodayWeFeast\**" />
+      <None Remove="War Peace AI Overhaul\Logging\**" />
+    </ItemGroup>
+    <ItemGroup>
       <Compile Remove="War Peace AI Overhaul\StrategicAIModules\old.cs" />
     </ItemGroup>
 
@@ -92,9 +99,6 @@
             <Regex>\$mcmversion\$</Regex>
             <Replacement>$(MCMVersion)</Replacement>
         </SubModuleOverrides>
-    </ItemGroup>
-    <ItemGroup>
-      <Folder Include="War Peace AI Overhaul\Logging\" />
     </ItemGroup>
 
 </Project>

@@ -13,12 +13,10 @@ using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
-
-using TodayWeFeast;
-
 using WarAndAiTweaks.Strategic;
 using WarAndAiTweaks.Strategic.Marshal;
 using WarAndAiTweaks.Systems;
+using WarAndAiTweaks.WarPeaceAI;
 
 namespace WarAndAiTweaks
 {
@@ -49,11 +47,10 @@ namespace WarAndAiTweaks
             if (game.GameType is Campaign)
             {
                 var campaignStarter = (CampaignGameStarter) gameStarter;
-                campaignStarter.AddBehavior(new FeastBehavior());
                 campaignStarter.AddBehavior(new SettlementCultureChangerBehavior());
-                campaignStarter.AddBehavior(new StrategicConquestAI());
                 campaignStarter.AddBehavior(new MarshalManager());
-                campaignStarter.AddBehavior(new StrategicAiMilitaryBehavior());
+                campaignStarter.AddBehavior(new EnhancedAiMilitaryBehavior());
+                campaignStarter.AddBehavior(new WarPeaceLogicController());
             }
         }
 

@@ -10,18 +10,16 @@ using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Party.PartyComponents;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
-using TaleWorlds.Library;
 using TaleWorlds.LinQuick;
 
 using MathF = TaleWorlds.Library.MathF;
 
 namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
 {
-    public class StrategicAiMilitaryBehavior : CampaignBehaviorBase
+    // Token: 0x02000404 RID: 1028
+    public class EnhancedAiMilitaryBehavior : CampaignBehaviorBase
     {
-        // Map of settlement -> total friendly strength that could plausibly contribute
-        private Dictionary<Settlement, float> _combinedStrengths = new Dictionary<Settlement, float>();
-
+        // Token: 0x06003EEF RID: 16111 RVA: 0x00135764 File Offset: 0x00133964
         public override void RegisterEvents()
         {
             CampaignEvents.SettlementEntered.AddNonSerializedListener(this, new Action<MobileParty, Settlement, Hero>(this.OnSettlementEntered));
@@ -29,15 +27,18 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
             CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, new Action<CampaignGameStarter>(this.OnSessionLaunched));
         }
 
+        // Token: 0x06003EF0 RID: 16112 RVA: 0x001357B6 File Offset: 0x001339B6
         private void OnSessionLaunched(CampaignGameStarter campaignGameStarter)
         {
             this._disbandPartyCampaignBehavior = Campaign.Current.GetCampaignBehavior<IDisbandPartyCampaignBehavior>();
         }
 
+        // Token: 0x06003EF1 RID: 16113 RVA: 0x001357C8 File Offset: 0x001339C8
         public override void SyncData(IDataStore dataStore)
         {
         }
 
+        // Token: 0x06003EF2 RID: 16114 RVA: 0x001357CA File Offset: 0x001339CA
         private void OnSettlementEntered(MobileParty mobileParty, Settlement settlement, Hero hero)
         {
             if (mobileParty != null && mobileParty.IsBandit && settlement.IsHideout && mobileParty.DefaultBehavior != AiBehavior.GoToSettlement)
@@ -46,91 +47,7 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
             }
         }
 
-        // --- Combined Strength Calculation ---
-
-        /// <summary>
-        /// Build a map of settlements under threat or high-value targets to the sum of all friendly parties/armies that could plausibly contribute.
-        /// </summary>
-        private void BuildCombinedStrengthsMap(IFaction faction)
-        {
-            _combinedStrengths.Clear();
-
-            // Only consider settlements under siege/raid or enemy fortifications near the faction
-            List<Settlement> relevantSettlements = new List<Settlement>();
-
-            // Own settlements under siege/raid
-            foreach (var settlement in faction.Settlements)
-            {
-                bool isUnderRaid = settlement.LastAttackerParty != null &&
-                                   settlement.LastAttackerParty.MapEvent != null &&
-                                   settlement.LastAttackerParty.MapEvent.EventType == MapEvent.BattleTypes.Raid;
-                if (settlement.IsUnderSiege || isUnderRaid)
-                    relevantSettlements.Add(settlement);
-            }
-
-            // Enemy fortifications (for overcommitting to sieges)
-            foreach (var enemyFaction in FactionManager.GetEnemyFactions(faction))
-            {
-                foreach (var enemySettlement in enemyFaction.Settlements)
-                {
-                    if (enemySettlement.IsFortification)
-                        relevantSettlements.Add(enemySettlement);
-                }
-            }
-
-            // Remove duplicates
-            relevantSettlements = relevantSettlements.Distinct().ToList();
-
-            // For each relevant settlement, sum up all friendly parties/armies that could plausibly reach and participate
-            foreach (var settlement in relevantSettlements)
-            {
-                float totalStrength = 0f;
-
-                foreach (var party in MobileParty.All)
-                {
-                    if (!party.IsActive || party.IsBandit || party.IsMilitia || party.IsCaravan || party.IsVillager || party.IsDisbanding)
-                        continue;
-                    if (party.MapFaction != faction)
-                        continue;
-                    if (party.LeaderHero == null)
-                        continue;
-
-                    // Only consider parties within 60km (tunable) and not already committed to another siege/raid
-                    float dist = party.Position2D.Distance(settlement.Position2D);
-                    if (dist > 60f)
-                        continue;
-
-                    // If party is already besieging/raiding another settlement, skip
-                    if (party.DefaultBehavior == AiBehavior.BesiegeSettlement && party.TargetSettlement != null && party.TargetSettlement != settlement)
-                        continue;
-                    if (party.DefaultBehavior == AiBehavior.RaidSettlement && party.TargetSettlement != null && party.TargetSettlement != settlement)
-                        continue;
-
-                    // Army: only count leader party to avoid double-counting
-                    if (party.Army != null && party.Army.LeaderParty != party)
-                        continue;
-
-                    // Use total strength with followers for armies, otherwise party strength
-                    float strength = party.Army != null
-                        ? party.Army.Parties.Sum(p => p.Party.TotalStrength)
-                        : party.Party.TotalStrength;
-
-                    totalStrength += strength;
-                }
-
-                _combinedStrengths[settlement] = totalStrength;
-            }
-        }
-
-        private float GetCombinedStrengthForObjective(Settlement settlement, float fallbackStrength)
-        {
-            if (_combinedStrengths.TryGetValue(settlement, out float value))
-                return value;
-            return fallbackStrength;
-        }
-
-        // --- Main AI logic ---
-
+        // Token: 0x06003EF3 RID: 16115 RVA: 0x001357F4 File Offset: 0x001339F4
         private void FindBestTargetAndItsValueForFaction(Army.ArmyTypes missionType, PartyThinkParams p, float ourStrength, float newArmyCreatingAdditionalConstant = 1f)
         {
             MobileParty mobilePartyOf = p.MobilePartyOf;
@@ -183,10 +100,26 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
                     break;
             }
 
-            // --- Build combined strengths map once per tick for this faction ---
-            BuildCombinedStrengthsMap(mapFaction);
+            // MODIFICATION: Handle priority defense of owned settlements under attack
+            if (missionType == Army.ArmyTypes.Defender)
+            {
+                // First, check for owned settlements under attack with high priority
+                foreach (Settlement ownedSettlement in mapFaction.Settlements)
+                {
+                    if (this.IsSettlementUnderAttackOrRaid(ownedSettlement))
+                    {
+                        // Force calculation for owned settlements under attack with priority boost
+                        this.CalculateMilitaryBehaviorForSettlement(ownedSettlement, missionType, aiBehavior, p, ourStrength, partySizeScore,
+                            mapFaction.Settlements.Count, mapFaction.TotalStrength, newArmyCreatingAdditionalConstant, true);
+                    }
+                }
 
-            if (missionType == Army.ArmyTypes.Defender || missionType == Army.ArmyTypes.Patrolling)
+                // Then proceed with normal defense calculations
+                this.CalculateMilitaryBehaviorForFactionSettlementsParallel(mapFaction, p, missionType, aiBehavior, ourStrength, partySizeScore, newArmyCreatingAdditionalConstant);
+                return;
+            }
+
+            if (missionType == Army.ArmyTypes.Patrolling)
             {
                 this.CalculateMilitaryBehaviorForFactionSettlementsParallel(mapFaction, p, missionType, aiBehavior, ourStrength, partySizeScore, newArmyCreatingAdditionalConstant);
                 return;
@@ -197,6 +130,15 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
             }
         }
 
+        // MODIFICATION: Helper method to check if settlement is under attack or raid
+        private bool IsSettlementUnderAttackOrRaid(Settlement settlement)
+        {
+            return (settlement.LastAttackerParty != null && settlement.LastAttackerParty.IsActive) ||
+                   (settlement.SiegeEvent != null && settlement.SiegeEvent.BesiegerCamp != null) ||
+                   (settlement.IsVillage && settlement.Village.VillageState == Village.VillageStates.BeingRaided);
+        }
+
+        // Token: 0x06003EF4 RID: 16116 RVA: 0x001359D0 File Offset: 0x00133BD0
         private void CalculateMilitaryBehaviorForFactionSettlementsParallel(IFaction faction, PartyThinkParams p, Army.ArmyTypes missionType, AiBehavior aiBehavior, float ourStrength, float partySizeScore, float newArmyCreatingAdditionalConstant)
         {
             MobileParty mobilePartyOf = p.MobilePartyOf;
@@ -205,42 +147,14 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
             for (int i = 0; i < faction.Settlements.Count; i++)
             {
                 Settlement settlement = faction.Settlements[i];
-                bool isOwnClan = settlement.OwnerClan != null && mobilePartyOf.LeaderHero != null && settlement.OwnerClan == mobilePartyOf.LeaderHero.Clan;
-                bool isUnderRaid = settlement.LastAttackerParty != null &&
-                                   settlement.LastAttackerParty.MapEvent != null &&
-                                   settlement.LastAttackerParty.MapEvent.EventType == MapEvent.BattleTypes.Raid;
-
-                // Use combined strength for this objective if available
-                float combinedStrength = GetCombinedStrengthForObjective(settlement, ourStrength);
-
                 if (this.CheckIfSettlementIsSuitableForMilitaryAction(settlement, mobilePartyOf, missionType))
                 {
-                    this.CalculateMilitaryBehaviorForSettlement(
-                        settlement, missionType, aiBehavior, p, combinedStrength, partySizeScore, count, totalStrength, newArmyCreatingAdditionalConstant,
-                        forceDefenseScore: false
-                    );
-                }
-
-                // --- Ensure defense score is always added for own settlements under siege/raid ---
-                if (missionType == Army.ArmyTypes.Defender
-                    && isOwnClan
-                    && (settlement.IsUnderSiege || isUnderRaid))
-                {
-                    bool alreadyScored = p.AIBehaviorScores != null &&
-                        p.AIBehaviorScores.Any(tuple =>
-                            tuple.Item1 != null &&
-                            tuple.Item1.Party != null &&
-                            tuple.Item1.Party as Settlement == settlement &&
-                            tuple.Item1.AiBehavior == AiBehavior.DefendSettlement);
-
-                    if (!alreadyScored)
-                    {
-                        this.CalculateMilitaryBehaviorForSettlement(settlement, Army.ArmyTypes.Defender, AiBehavior.DefendSettlement, p, combinedStrength, partySizeScore, count, totalStrength, newArmyCreatingAdditionalConstant, forceDefenseScore: true);
-                    }
+                    this.CalculateMilitaryBehaviorForSettlement(settlement, missionType, aiBehavior, p, ourStrength, partySizeScore, count, totalStrength, newArmyCreatingAdditionalConstant);
                 }
             }
         }
 
+        // Token: 0x06003EF5 RID: 16117 RVA: 0x00135A3C File Offset: 0x00133C3C
         private bool CheckIfSettlementIsSuitableForMilitaryAction(Settlement settlement, MobileParty mobileParty, Army.ArmyTypes missionType)
         {
             if (Game.Current.CheatMode && !CampaignCheats.MainPartyIsAttackable && settlement.Party.MapEvent != null && settlement.Party.MapEvent == MapEvent.PlayerMapEvent)
@@ -251,6 +165,13 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
             {
                 return false;
             }
+
+            // MODIFICATION: Always allow defending owned settlements under attack
+            if (missionType == Army.ArmyTypes.Defender && settlement.MapFaction == mobileParty.MapFaction && this.IsSettlementUnderAttackOrRaid(settlement))
+            {
+                return true;
+            }
+
             if (missionType == Army.ArmyTypes.Raider)
             {
                 float num = MathF.Max(100f, MathF.Min(250f, Campaign.Current.Models.MapDistanceModel.GetDistance(mobileParty.MapFaction.FactionMidSettlement, settlement.MapFaction.FactionMidSettlement)));
@@ -262,26 +183,37 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
             return true;
         }
 
-        private void CalculateMilitaryBehaviorForSettlement(Settlement settlement, Army.ArmyTypes missionType, AiBehavior aiBehavior, PartyThinkParams p, float ourStrength, float partySizeScore, int numberOfEnemyFactionSettlements, float totalEnemyMobilePartyStrength, float newArmyCreatingAdditionalConstant = 1f, bool forceDefenseScore = false)
+        // Token: 0x06003EF6 RID: 16118 RVA: 0x00135B10 File Offset: 0x00133D10
+        private void CalculateMilitaryBehaviorForSettlement(
+    Settlement settlement,
+    Army.ArmyTypes missionType,
+    AiBehavior aiBehavior,
+    PartyThinkParams p,
+    float ourStrength,
+    float partySizeScore,
+    int numberOfEnemyFactionSettlements,
+    float totalEnemyMobilePartyStrength,
+    float newArmyCreatingAdditionalConstant = 1f,
+    bool isPriorityDefense = false)
         {
-            bool isDefendingOwnUnderAttack =
-                missionType == Army.ArmyTypes.Defender
-                && settlement.OwnerClan != null
-                && p.MobilePartyOf.LeaderHero != null
-                && settlement.OwnerClan == p.MobilePartyOf.LeaderHero.Clan
-                && (settlement.IsUnderSiege ||
-                    (settlement.LastAttackerParty != null &&
-                     settlement.LastAttackerParty.MapEvent != null &&
-                     settlement.LastAttackerParty.MapEvent.EventType == MapEvent.BattleTypes.Raid));
+            bool shouldCalculate = false;
 
-            bool shouldScore =
-                (missionType == Army.ArmyTypes.Defender && settlement.LastAttackerParty != null && settlement.LastAttackerParty.IsActive)
-                || (missionType == Army.ArmyTypes.Raider && settlement.IsVillage && settlement.Village.VillageState == Village.VillageStates.Normal)
-                || (missionType == Army.ArmyTypes.Besieger && settlement.IsFortification && (settlement.SiegeEvent == null || settlement.SiegeEvent.BesiegerCamp.LeaderParty.MapFaction == p.MobilePartyOf.MapFaction))
-                || (missionType == Army.ArmyTypes.Patrolling && !settlement.IsCastle && p.WillGatherAnArmy)
-                || (forceDefenseScore && isDefendingOwnUnderAttack);
+            // Original conditions
+            if ((missionType == Army.ArmyTypes.Defender && settlement.LastAttackerParty != null && settlement.LastAttackerParty.IsActive) ||
+                (missionType == Army.ArmyTypes.Raider && settlement.IsVillage && settlement.Village.VillageState == Village.VillageStates.Normal) ||
+                (missionType == Army.ArmyTypes.Besieger && settlement.IsFortification && (settlement.SiegeEvent == null || settlement.SiegeEvent.BesiegerCamp.LeaderParty.MapFaction == p.MobilePartyOf.MapFaction)) ||
+                (missionType == Army.ArmyTypes.Patrolling && !settlement.IsCastle && p.WillGatherAnArmy))
+            {
+                shouldCalculate = true;
+            }
 
-            if (shouldScore)
+            // MODIFICATION: Force calculation for priority defense of owned settlements under attack
+            if (isPriorityDefense || (missionType == Army.ArmyTypes.Defender && settlement.MapFaction == p.MobilePartyOf.MapFaction && this.IsSettlementUnderAttackOrRaid(settlement)))
+            {
+                shouldCalculate = true;
+            }
+
+            if (shouldCalculate)
             {
                 MobileParty mobilePartyOf = p.MobilePartyOf;
                 IFaction mapFaction = mobilePartyOf.MapFaction;
@@ -297,8 +229,36 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
                 }
                 float num3 = MathF.Max(0f, num) / num2;
                 float num4 = (num3 < 5f) ? (0.1f + 0.9f * (num3 / 5f)) : 1f;
-                float num5 = (missionType != Army.ArmyTypes.Patrolling) ? Campaign.Current.Models.TargetScoreCalculatingModel.GetTargetScoreForFaction(settlement, missionType, mobilePartyOf, ourStrength, numberOfEnemyFactionSettlements, totalEnemyMobilePartyStrength) : Campaign.Current.Models.TargetScoreCalculatingModel.CalculatePatrollingScoreForSettlement(settlement, mobilePartyOf);
+                float num5 = (missionType != Army.ArmyTypes.Patrolling)
+                    ? Campaign.Current.Models.TargetScoreCalculatingModel.GetTargetScoreForFaction(settlement, missionType, mobilePartyOf, ourStrength, numberOfEnemyFactionSettlements, totalEnemyMobilePartyStrength)
+                    : Campaign.Current.Models.TargetScoreCalculatingModel.CalculatePatrollingScoreForSettlement(settlement, mobilePartyOf);
                 num5 *= partySizeScore * num4 * newArmyCreatingAdditionalConstant;
+
+                // MODIFICATION: Boost scores for siege and defend operations
+                if (missionType == Army.ArmyTypes.Besieger)
+                {
+                    num5 *= 2.5f; // Increased from 1.5f to 2.5x for siege operations
+                }
+                else if (missionType == Army.ArmyTypes.Defender)
+                {
+                    num5 *= 2.0f; // Increased from 1.3f to 2.0x for defend operations
+
+                    // Massive priority boost for defending owned settlements under attack
+                    if (settlement.MapFaction == mapFaction && this.IsSettlementUnderAttackOrRaid(settlement))
+                    {
+                        num5 *= 7.0f; // Increased from 5.0f to 7.0x
+
+                        // Additional boost based on settlement importance
+                        if (settlement.IsTown)
+                        {
+                            num5 *= 2.0f; // Increased from 1.5f to 2.0x for towns
+                        }
+                        else if (settlement.IsCastle)
+                        {
+                            num5 *= 1.5f; // Increased from 1.3f to 1.5x for castles
+                        }
+                    }
+                }
 
                 if (mobilePartyOf.Objective == MobileParty.PartyObjective.Defensive)
                 {
@@ -332,17 +292,13 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
                 }
                 num5 *= 0.25f;
             IL_209:
-                // Apply 100x bonus if defending own settlement under siege/raid
-                if (isDefendingOwnUnderAttack)
-                {
-                    num5 *= 100f;
-                }
                 AIBehaviorTuple aibehaviorTuple = new AIBehaviorTuple(settlement, aiBehavior, p.WillGatherAnArmy);
                 ValueTuple<AIBehaviorTuple, float> valueTuple = new ValueTuple<AIBehaviorTuple, float>(aibehaviorTuple, num5);
                 p.AddBehaviorScore(valueTuple);
             }
         }
 
+        // Token: 0x06003EF7 RID: 16119 RVA: 0x00135D5C File Offset: 0x00133F5C
         private void AiHourlyTick(MobileParty mobileParty, PartyThinkParams p)
         {
             if (mobileParty.IsMilitia || mobileParty.IsCaravan || mobileParty.IsVillager || mobileParty.IsBandit || mobileParty.IsDisbanding || mobileParty.LeaderHero == null || (mobileParty.MapFaction != Clan.PlayerClan.MapFaction && !mobileParty.MapFaction.IsKingdomFaction))
@@ -417,6 +373,23 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
             {
                 float num11 = Campaign.Current.Models.TargetScoreCalculatingModel.CurrentObjectiveValue(mobileParty);
                 num11 *= ((mobileParty.MapEvent == null || mobileParty.SiegeEvent == null) ? (num10 * num5) : 1f);
+
+                // MODIFICATION: Boost current objective scores for siege and defend
+                if (mobileParty.DefaultBehavior == AiBehavior.BesiegeSettlement)
+                {
+                    num11 *= 2.5f; // Increased from 1.5f to 2.5x for siege operations
+                }
+                else if (mobileParty.DefaultBehavior == AiBehavior.DefendSettlement)
+                {
+                    num11 *= 2.0f; // Increased from 1.3f to 2.0x for defend operations
+
+                    // Additional massive boost if defending own settlement under attack
+                    if (mobileParty.TargetSettlement != null && mobileParty.TargetSettlement.MapFaction == mobileParty.MapFaction && this.IsSettlementUnderAttackOrRaid(mobileParty.TargetSettlement))
+                    {
+                        num11 *= 7.0f; // Increased from 5.0f to 7.0x
+                    }
+                }
+
                 if (mobileParty.SiegeEvent != null)
                 {
                     float num12 = 0f;
@@ -497,9 +470,39 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
                 p.WillGatherAnArmy = false;
                 this.FindBestTargetAndItsValueForFaction((Army.ArmyTypes) i, p, totalStrengthWithFollowers, 1f);
             }
+
+            // --- MODIFICATION: Always add highest-priority defend objective for owned settlements under attack ---
+            var mapFactionFinal = mobileParty.MapFaction;
+            var clan = mobileParty.LeaderHero?.Clan;
+            if (mapFactionFinal != null && clan != null)
+            {
+                foreach (var ownedSettlement in mapFactionFinal.Settlements)
+                {
+                    if (ownedSettlement.OwnerClan == clan && this.IsSettlementUnderAttackOrRaid(ownedSettlement))
+                    {
+                        var defendTuple = new AIBehaviorTuple(ownedSettlement, AiBehavior.DefendSettlement, false);
+                        float maxScore = p.AIBehaviorScores.Count > 0 ? p.AIBehaviorScores.Max(bs => bs.Item2) : 1000f;
+                        float priorityScore = maxScore + 10000f; // Always higher than any other
+
+                        int idx = p.AIBehaviorScores.FindIndex(bs => bs.Item1.Equals(defendTuple));
+                        if (idx >= 0)
+                        {
+                            if (p.AIBehaviorScores[idx].Item2 < priorityScore)
+                                p.AIBehaviorScores[idx] = (defendTuple, priorityScore);
+                        }
+                        else
+                        {
+                            p.AddBehaviorScore((defendTuple, priorityScore));
+                        }
+                    }
+                }
+            }
         }
 
+        // Token: 0x04001269 RID: 4713
         private const int MinimumInfluenceNeededToCreateArmy = 50;
+
+        // Token: 0x0400126A RID: 4714
         private IDisbandPartyCampaignBehavior _disbandPartyCampaignBehavior;
     }
 }

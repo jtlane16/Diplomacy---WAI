@@ -5,10 +5,7 @@ using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.SaveSystem;
 
-using TodayWeFeast;
 using WarAndAiTweaks.Strategic;
-using WarAndAiTweaks.Strategic.Scoring;
-using WarAndAiTweaks.Strategic.Diplomacy;
 
 public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
 {
@@ -16,19 +13,6 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
 
     protected override void DefineClassTypes()
     {
-        // Feast system classes
-        AddClassDefinition(typeof(FeastObject), 2137782638);
-        AddClassDefinition(typeof(FeastBehavior), 2137782639);
-
-        // Strategic AI classes
-        AddClassDefinition(typeof(RunawayThreatData), 2137782640);
-        AddClassDefinition(typeof(PeaceProposal), 2137782641);
-        AddClassDefinition(typeof(ConquestStrategy), 2137782642);
-
-        // Simple record classes instead of nested dictionaries
-        AddClassDefinition(typeof(WarRecord), 2137782643);
-        AddClassDefinition(typeof(PeaceOfferRecord), 2137782644);
-
     }
 
     protected override void DefineContainerDefinitions()
@@ -36,7 +20,6 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         // Basic containers
         ConstructContainerDefinition(typeof(List<Hero>));
         ConstructContainerDefinition(typeof(List<Kingdom>));
-        ConstructContainerDefinition(typeof(List<FeastObject>));
 
         // Basic dictionaries
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, double>));
@@ -44,13 +27,7 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, float>));
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, CampaignTime>));
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, Hero>));
-
-        // Strategic AI containers - simple lists instead of nested dictionaries
-        ConstructContainerDefinition(typeof(Dictionary<Kingdom, RunawayThreatData>));
-        ConstructContainerDefinition(typeof(Dictionary<Kingdom, ConquestStrategy>));
-        ConstructContainerDefinition(typeof(List<PeaceProposal>));
-        ConstructContainerDefinition(typeof(List<WarRecord>));
-        ConstructContainerDefinition(typeof(List<PeaceOfferRecord>));
+        ConstructContainerDefinition(typeof(Dictionary<string, float>));
 
         // Add missing container definitions that might be needed
         ConstructContainerDefinition(typeof(List<int>));

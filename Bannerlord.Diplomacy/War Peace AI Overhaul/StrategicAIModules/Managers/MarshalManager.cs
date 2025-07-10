@@ -71,7 +71,7 @@ namespace WarAndAiTweaks.Strategic.Marshal
 
             foreach (var kingdom in allKingdoms)
             {
-                if (kingdom == null || kingdom.IsEliminated || kingdom.RulingClan == null || kingdom.Leader == null)
+                if (kingdom == null || kingdom.IsEliminated || kingdom.IsMinorFaction || kingdom.IsRebelClan || kingdom.RulingClan == null || kingdom.Leader == null)
                     continue;
 
                 if (!kingdom.Leader.IsAlive)
@@ -276,24 +276,10 @@ namespace WarAndAiTweaks.Strategic.Marshal
     [HarmonyPatch(typeof(DefaultArmyManagementCalculationModel), "CalculateDailyCohesionChange")]
     public class MarshalCohesionPenaltyPatch
     {
-        public static void Postfix(Army army, bool includeDescriptions, ref ExplainedNumber __result)
+        public static void Postfix(Army army, ref ExplainedNumber __result, bool includeDescriptions = false)
         {
-            var leaderHero = army.LeaderParty?.LeaderHero;
-            var kingdom = leaderHero?.MapFaction as Kingdom;
-            var marshalManager = MarshalManager.Instance;
-            if (leaderHero != null && kingdom != null && marshalManager != null)
-            {
-                var marshal = marshalManager.GetMarshal(kingdom);
-                if (marshal == null || leaderHero != marshal)
-                {
-                    // Only apply if cohesion is negative (loss)
-                    if (__result.ResultNumber < 0f)
-                    {
-                        float original = __result.ResultNumber;
-                        __result.AddFactor(2.0f, new TaleWorlds.Localization.TextObject("Not Marshal Penalty"));
-                    }
-                }
-            }
+            if (MarshalManager.Instance == null || MarshalManager.Instance.GetMarshal(army.Kingdom) == null || army.LeaderParty.LeaderHero != MarshalManager.Instance.GetMarshal(army.Kingdom)) return;
+            __result.AddFactor(-0.5f, new TextObject("Marshal Cohesion Bonus"));
         }
     }
 }

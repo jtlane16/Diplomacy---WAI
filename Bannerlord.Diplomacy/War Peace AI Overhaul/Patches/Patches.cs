@@ -1,10 +1,13 @@
 ﻿using HarmonyLib;
 
+using Helpers;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors;
 using TaleWorlds.CampaignSystem.ComponentInterfaces;
@@ -17,9 +20,8 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 
-using WarAndAiTweaks.Strategic;
-using WarAndAiTweaks.Strategic.Marshal;
-using WarAndAiTweaks.Strategic.Scoring;
+using WarAndAiTweaks;
+using MathF = TaleWorlds.Library.MathF;
 
 namespace Diplomacy.War_Peace_AI_Overhaul
 {
@@ -35,167 +37,9 @@ namespace Diplomacy.War_Peace_AI_Overhaul
         public class KingdomPlayerPeacePatch
         {
             // Get the Strategic AI instance to evaluate AI willingness for peace
-            private static StrategicConquestAI GetStrategicAI()
-            {
-                // Look for the StrategicConquestAI behavior in the campaign
-                return Campaign.Current?.GetCampaignBehavior<StrategicConquestAI>();
-            }
-
-            // Create temporary scoring components for evaluation
-            // Create temporary scoring components for evaluation
-            private static bool WantsPeace(Kingdom aiKingdom, Kingdom playerKingdom)
-            {
-                try
-                {
-                    var strategicAI = GetStrategicAI();
-                    if (strategicAI == null)
-                    {
-                        // Fallback to simplified logic if Strategic AI is not available
-                        return GetFallbackPeaceWillingness(aiKingdom, playerKingdom);
-                    }
-
-                    // FIXED: Create temporary components using proper constructor pattern
-                    var runawayAnalyzer = new RunawayFactionAnalyzer();
-                    var warScorer = new WarScorer(runawayAnalyzer);
-
-                    // Try to get war start time from stance and record it
-                    var stance = aiKingdom.GetStanceWith(playerKingdom);
-                    if (stance != null && stance.IsAtWar)
-                    {
-                        var warTime = stance.WarStartDate;
-                        warScorer.RecordWarStart(aiKingdom, playerKingdom);
-                    }
-
-                    // FIXED: Pass WarScorer instead of nested dictionary
-                    var peaceScorer = new PeaceScorer(runawayAnalyzer, warScorer);
-                    var strategy = new ConquestStrategy(aiKingdom);
-
-                    // Calculate peace priority using the actual AI logic
-                    float peacePriority = peaceScorer.CalculatePeacePriority(aiKingdom, playerKingdom, strategy);
-                    float peaceThreshold = peaceScorer.CalculatePeaceThreshold(aiKingdom);
-
-                    // AI wants peace if priority exceeds threshold
-                    bool wantsPeace = peacePriority > peaceThreshold;
-
-                    // Log the decision for debugging
-                    InformationManager.DisplayMessage(new InformationMessage(
-                        $"[Peace Evaluation] {aiKingdom.Name}: Priority={peacePriority:F1}, Threshold={peaceThreshold:F1}, Wants Peace={wantsPeace}",
-                        wantsPeace ? Colors.Green : Colors.Red));
-
-                    return wantsPeace;
-                }
-                catch (System.Exception ex)
-                {
-                    // Fallback on any errors
-                    InformationManager.DisplayMessage(new InformationMessage(
-                        $"[Peace Evaluation Error] {ex.Message} - Using fallback logic", Colors.Yellow));
-                    return GetFallbackPeaceWillingness(aiKingdom, playerKingdom);
-                }
-            }
-
-            // Fallback logic if Strategic AI components aren't available
-            private static bool GetFallbackPeaceWillingness(Kingdom aiKingdom, Kingdom playerKingdom)
-            {
-                var stance = aiKingdom.GetStanceWith(playerKingdom);
-                if (stance == null) return true;
-
-                // Basic factors for fallback
-                float strengthRatio = playerKingdom.TotalStrength / aiKingdom.TotalStrength;
-                int aiActiveWars = FactionManager.GetEnemyKingdoms(aiKingdom).Count();
-                int aiTerritories = aiKingdom.Fiefs.Count;
-                float daysSinceWar = stance.WarStartDate.ElapsedDaysUntilNow;
-
-                // AI more likely to want peace if:
-                // - Player is much stronger (2x+)
-                // - AI is fighting multiple wars (3+)
-                // - AI has very few territories (≤2)
-                // - War has lasted a long time (100+ days)
-                bool wantsPeace = strengthRatio > 2.0f ||
-                                 aiActiveWars >= 3 ||
-                                 aiTerritories <= 2 ||
-                                 daysSinceWar > 100f;
-
-                return wantsPeace;
-            }
-
-            // Main patch method
-            // Main patch method
             public static bool Prefix(KingdomWarItemVM item)
             {
-                var playerKingdom = Hero.MainHero.Clan.Kingdom;
-                var targetKingdom = item.Faction2 as Kingdom;
-
-                if (playerKingdom == null || targetKingdom == null)
-                    return true; // Allow if we can't determine kingdoms
-
-                // FIXED: Only allow peace negotiations if player is the kingdom ruler
-                if (playerKingdom.RulingClan?.Leader != Hero.MainHero)
-                {
-                    InformationManager.DisplayMessage(new InformationMessage(
-                        "Only the kingdom ruler can negotiate peace agreements.",
-                        Colors.Red));
-                    return false; // Block peace attempt for vassals
-                }
-
-                // Special case: If player kingdom is the target, check if the other faction wants peace
-                var aiKingdom = (item.Faction1 as Kingdom == playerKingdom) ? targetKingdom : (item.Faction1 as Kingdom);
-
-                if (aiKingdom == null || aiKingdom == playerKingdom)
-                    return true; // Allow if both are player kingdoms or can't determine
-
-                // Check if the AI kingdom wants peace with the player
-                if (!WantsPeace(aiKingdom, playerKingdom))
-                {
-                    // Determine why AI doesn't want peace for better messaging
-                    string reason = GetPeaceRejectionReason(aiKingdom, playerKingdom);
-
-                    InformationManager.DisplayMessage(new InformationMessage(
-                        $"{aiKingdom.Name} is not interested in peace at this time. {reason}",
-                        Colors.Red));
-
-                    return false; // Block the peace attempt
-                }
-
-                // AI wants peace - allow the player action
-                InformationManager.DisplayMessage(new InformationMessage(
-                    $"{aiKingdom.Name} is willing to negotiate peace.",
-                    Colors.Green));
-
-                return true; // Allow peace negotiation
-            }
-
-            // Provide specific reasons why AI rejected peace
-            private static string GetPeaceRejectionReason(Kingdom aiKingdom, Kingdom playerKingdom)
-            {
-                try
-                {
-                    var stance = aiKingdom.GetStanceWith(playerKingdom);
-                    if (stance == null) return "";
-
-                    float strengthRatio = playerKingdom.TotalStrength / aiKingdom.TotalStrength;
-                    int aiActiveWars = FactionManager.GetEnemyKingdoms(aiKingdom).Count();
-                    int aiTerritories = aiKingdom.Fiefs.Count;
-                    float daysSinceWar = stance.WarStartDate.ElapsedDaysUntilNow;
-
-                    // Determine primary reason for rejection
-                    if (daysSinceWar < 20f)
-                        return "The war is too recent - they need more time to consider peace.";
-
-                    if (strengthRatio < 0.8f)
-                        return "They believe they have a military advantage.";
-
-                    if (aiTerritories <= 1)
-                        return "They are fighting for survival and won't give up easily.";
-
-                    if (aiActiveWars <= 1)
-                        return "They can focus their full attention on this war.";
-
-                    return "They are determined to continue the conflict.";
-                }
-                catch
-                {
-                    return "They are not ready for peace negotiations.";
-                }
+                return true;
             }
         }
 
@@ -277,6 +121,96 @@ namespace Diplomacy.War_Peace_AI_Overhaul
             public static bool Prefix()
             {
                 return false;
+            }
+        }
+        [HarmonyPatch(typeof(KingdomDiplomacyVM), "OnDeclarePeace")]
+        public class OnDeclarePeace
+        {
+            public static bool Prefix(KingdomWarItemVM item)
+            {
+                var playerKingdom = Hero.MainHero.Clan.Kingdom;
+                var targetKingdom = item.Faction2 as Kingdom;
+                if (playerKingdom == null || targetKingdom == null)
+                    return false;
+
+                // Only allow peace if the AI is willing (optional, can be removed if not needed)
+                float aiPeaceScore = WarAndAiTweaks.WarPeaceAI.PeaceScoring.GetTotalPeaceScore(targetKingdom, playerKingdom);
+                if (aiPeaceScore < 100f)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage($"{targetKingdom.Name} is not interested in peace at this time.", Colors.Red));
+                    return false;
+                }
+
+                // Calculate daily tribute (from player to AI)
+                int dailyTribute = Diplomacy.War_Peace_AI_Overhaul.StrategicAIModules.StrategicAI.WarPeaceLogicHelpers.GetPeaceTribute(
+                    playerKingdom.Leader.Clan,
+                    targetKingdom.Leader.Clan,
+                    playerKingdom,
+                    targetKingdom
+                );
+
+                // Apply peace with tribute
+                MakePeaceAction.Apply(playerKingdom, targetKingdom, dailyTribute);
+
+                // Show result to player
+                string tributeText = dailyTribute > 0
+                    ? $"You will pay {dailyTribute} gold per day in tribute."
+                    : dailyTribute < 0
+                        ? $"You will receive {Math.Abs(dailyTribute)} gold per day in tribute."
+                        : "No tribute will be paid.";
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"You declared peace with {targetKingdom.Name}. {tributeText}"
+                ));
+
+                return false; // Skip original method
+            }
+        }
+
+        [HarmonyPatch(typeof(DefaultSettlementFoodModel), "NumberOfMenOnGarrisonToEatOneFood", MethodType.Getter)]
+        public class GarrisonFoodConsumptionPatch
+        {
+            [HarmonyPostfix]
+            public static void Postfix(ref int __result)
+            {
+                // Original: 20 men eat 1 food
+                // New: 40 men eat 1 food (50% reduction in food consumption)
+                __result = 40;
+
+                // Or make it configurable:
+                // __result = (int)(__result * GarrisonConfig.FoodConsumptionEfficiency);
+            }
+        }
+
+        // Main garrison calculation patch
+        [HarmonyPatch(typeof(FactionHelper), "FindIdealGarrisonStrengthPerWalledCenter")]
+        public class FindIdealGarrisonStrengthPatch
+        {
+            [HarmonyPostfix]
+            public static void Postfix(ref float __result)
+            {
+                // Apply base multiplier to final result
+                __result *= 2.0f;
+
+                // Ensure minimum garrison size
+                __result = MathF.Max(__result, 50f);
+            }
+        }
+        [HarmonyPatch(typeof(DefaultArmyManagementCalculationModel), "GetMobilePartiesToCallToArmy")]
+        public class Patch_RemovePlayerCompanionsFromArmyCall
+        {
+            public static void Postfix(MobileParty leaderParty, ref List<MobileParty> __result)
+            {
+                if (__result == null)
+                    return;
+
+                // Remove all player companions (not main hero, not player clan lords)
+                __result.RemoveAll(mp =>
+                    mp != null &&
+                    mp.LeaderHero != null &&
+                    mp.LeaderHero.Clan != null &&
+                    mp.LeaderHero.Clan == Hero.MainHero.Clan &&
+                    mp.LeaderHero.Clan == Clan.PlayerClan
+                );
             }
         }
     }

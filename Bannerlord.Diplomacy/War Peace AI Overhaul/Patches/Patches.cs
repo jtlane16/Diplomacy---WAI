@@ -21,6 +21,8 @@ using TaleWorlds.Core;
 using TaleWorlds.Library;
 
 using WarAndAiTweaks;
+using WarAndAiTweaks.WarPeaceAI;
+
 using MathF = TaleWorlds.Library.MathF;
 
 namespace Diplomacy.War_Peace_AI_Overhaul
@@ -134,15 +136,18 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                     return false;
 
                 // Only allow peace if the AI is willing (optional, can be removed if not needed)
-                float aiPeaceScore = WarAndAiTweaks.WarPeaceAI.PeaceScoring.GetTotalPeaceScore(targetKingdom, playerKingdom);
-                if (aiPeaceScore < 100f)
+                var controller = Campaign.Current.GetCampaignBehavior<KingdomLogicController>();
+                float stance = controller?.GetKingdomStance(targetKingdom, playerKingdom) ?? 50f;
+
+                // Use the stance threshold for peace (lower stance = more willing for peace)
+                if (stance > KingdomStrategy.PEACE_THRESHOLD)
                 {
                     InformationManager.DisplayMessage(new InformationMessage($"{targetKingdom.Name} is not interested in peace at this time.", Colors.Red));
                     return false;
                 }
 
                 // Calculate daily tribute (from player to AI)
-                int dailyTribute = Diplomacy.War_Peace_AI_Overhaul.StrategicAIModules.StrategicAI.WarPeaceLogicHelpers.GetPeaceTribute(
+                int dailyTribute = Diplomacy.War_Peace_AI_Overhaul.StrategicAIModules.StrategicAI.KingdomLogicHelpers.GetPeaceTribute(
                     playerKingdom.Leader.Clan,
                     targetKingdom.Leader.Clan,
                     playerKingdom,

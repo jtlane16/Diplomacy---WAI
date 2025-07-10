@@ -50,7 +50,7 @@ namespace WarAndAiTweaks
                 campaignStarter.AddBehavior(new SettlementCultureChangerBehavior());
                 campaignStarter.AddBehavior(new MarshalManager());
                 campaignStarter.AddBehavior(new EnhancedAiMilitaryBehavior());
-                campaignStarter.AddBehavior(new WarPeaceLogicController());
+                campaignStarter.AddBehavior(new KingdomLogicController());
             }
         }
 

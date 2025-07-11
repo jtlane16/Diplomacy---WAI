@@ -30,11 +30,8 @@
         <DefineConstants>$(DefineConstants);$(GameVersionConstant)</DefineConstants>
     </PropertyGroup>
     <ItemGroup>
-      <Compile Remove="TodayWeFeast\**" />
       <Compile Remove="War Peace AI Overhaul\Logging\**" />
-      <EmbeddedResource Remove="TodayWeFeast\**" />
       <EmbeddedResource Remove="War Peace AI Overhaul\Logging\**" />
-      <None Remove="TodayWeFeast\**" />
       <None Remove="War Peace AI Overhaul\Logging\**" />
     </ItemGroup>
     <ItemGroup>

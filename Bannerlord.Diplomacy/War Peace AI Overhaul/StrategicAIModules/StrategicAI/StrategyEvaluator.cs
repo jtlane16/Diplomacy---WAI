@@ -1,9 +1,12 @@
 ﻿using Diplomacy.War_Peace_AI_Overhaul.StrategicAIModules.StrategicAI;
 
 using System;
+using System.Linq;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
+
+using TodayWeFeast;
 
 using MathF = TaleWorlds.Library.MathF;
 
@@ -283,8 +286,6 @@ namespace WarAndAiTweaks.WarPeaceAI
             }
             return reasons[idx];
         }
-
-
         public static string GetPeaceRejectionReason(Kingdom requester, Kingdom rejecter)
         {
             // Narrative motive for seeking peace
@@ -310,6 +311,15 @@ namespace WarAndAiTweaks.WarPeaceAI
             // Compose the final chronicle
             return $"Thus the chroniclers write that {requester.Name} sought peace with {rejecter.Name} because {peaceReason.TrimEnd('.')}, yet {rejectionReason}";
         }
+        public static bool IsFeastActiveForKingdom(Kingdom kingdom)
+        {
+            // FeastBehavior.Instance is only non-null if the feast mod is initialized
+            if (FeastBehavior.Instance == null)
+                return false; // Feast mod not initialized, allow normal logic
 
+            // Check if any feast is currently active for this kingdom
+            return FeastBehavior.Instance.Feasts != null
+                && FeastBehavior.Instance.Feasts.Any(f => f.Kingdom == kingdom);
+        }
     }
 }

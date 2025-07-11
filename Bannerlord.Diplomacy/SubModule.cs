@@ -13,6 +13,9 @@ using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
+
+using TodayWeFeast;
+
 using WarAndAiTweaks.Strategic;
 using WarAndAiTweaks.Strategic.Marshal;
 using WarAndAiTweaks.Systems;
@@ -51,6 +54,7 @@ namespace WarAndAiTweaks
                 campaignStarter.AddBehavior(new MarshalManager());
                 campaignStarter.AddBehavior(new EnhancedAiMilitaryBehavior());
                 campaignStarter.AddBehavior(new KingdomLogicController());
+                campaignStarter.AddBehavior(new FeastBehavior());
             }
         }
 

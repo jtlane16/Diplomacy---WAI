@@ -115,6 +115,10 @@ namespace WarAndAiTweaks.WarPeaceAI
         }
         private bool ProcessWarDecision(Kingdom self, Kingdom target, KingdomStrategy strategy)
         {
+            // Feast integration: Prevent war declaration if a feast is active for this kingdom
+            if (StrategyEvaluator.IsFeastActiveForKingdom(self))
+                return false;
+
             float stance = strategy.GetStance(target);
 
             if (StrategicSafeguards.IsDecisionTooSoon(self, target, true))

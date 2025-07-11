@@ -2,7 +2,7 @@
 
 namespace Diplomacy.Companion
 {
-    public class CompanionHighlighterVM : ViewModel
+    public class CompanionHighlighterVM : TaleWorlds.Library.ViewModel // Ensure ViewModel is correctly referenced
     {
         private CompanionIconVM _companion1;
         private CompanionIconVM _companion2;

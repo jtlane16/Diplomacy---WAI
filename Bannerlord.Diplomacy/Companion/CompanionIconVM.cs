@@ -4,7 +4,7 @@ using TaleWorlds.Library;
 
 namespace Diplomacy.Companion
 {
-    public class CompanionIconVM : ViewModel
+    public class CompanionIconVM : TaleWorlds.Library.ViewModel // Use the correct namespace for ViewModel
     {
         private float _positionX;
         private float _positionY;

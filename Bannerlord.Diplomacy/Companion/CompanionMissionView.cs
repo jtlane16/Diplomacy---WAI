@@ -61,10 +61,26 @@ namespace Diplomacy.Companion
 
             _agentToIconMap.Clear();
 
+            // Reset all icon slots
+            for (int i = 0; i < 5; i++)
+            {
+                var iconVM = _dataSource.GetCompanionSlot(i);
+                if (iconVM != null)
+                {
+                    iconVM.CompanionName = string.Empty;
+                    iconVM.IsVisible = false;
+                    iconVM.PositionX = 0f;
+                    iconVM.PositionY = 0f;
+                    iconVM.Width = 30f;
+                    iconVM.Height = 30f;
+                    iconVM.FontSize = 16;
+                }
+            }
+
             int companionIndex = 0;
             foreach (var agent in CompanionMissionLogic.Instance.MissionCompanions)
             {
-                if (agent?.Character is CharacterObject co && companionIndex < 5) // Max 5 companions
+                if (agent?.Character is CharacterObject co && companionIndex < 5)
                 {
                     var iconVM = _dataSource.GetCompanionSlot(companionIndex);
                     if (iconVM != null)
@@ -154,12 +170,18 @@ namespace Diplomacy.Companion
         {
             base.OnAgentRemoved(affectedAgent, affectorAgent, agentState, blow);
 
-            if (_agentToIconMap.ContainsKey(affectedAgent))
+            if (_agentToIconMap.TryGetValue(affectedAgent, out var iconVM))
             {
-                // Hide the icon
-                _agentToIconMap[affectedAgent].IsVisible = false;
+                // Hide and reset the icon
+                iconVM.IsVisible = false;
+                iconVM.CompanionName = string.Empty;
+                iconVM.PositionX = 0f;
+                iconVM.PositionY = 0f;
+                iconVM.Width = 30f;
+                iconVM.Height = 30f;
+                iconVM.FontSize = 16;
 
-                // Removed the contour removal code since we're no longer adding contours
+                _agentToIconMap.Remove(affectedAgent);
             }
         }
     }

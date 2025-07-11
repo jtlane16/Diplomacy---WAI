@@ -1,12 +1,8 @@
 ﻿using Diplomacy.War_Peace_AI_Overhaul.StrategicAIModules.StrategicAI;
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 
 using TaleWorlds.CampaignSystem;
-using TaleWorlds.CampaignSystem.Settlements;
-using TaleWorlds.Core;
 using TaleWorlds.Library;
 
 using MathF = TaleWorlds.Library.MathF;
@@ -14,13 +10,10 @@ using MathF = TaleWorlds.Library.MathF;
 namespace WarAndAiTweaks.WarPeaceAI
 {
     /// <summary>
-    /// Calculates daily stance changes based on various factors
+    /// Calculates daily stance changes based on core factors only
     /// </summary>
     public static class StrategyEvaluator
     {
-        /// <summary>
-        /// Calculates the daily stance change for one kingdom toward another
-        /// </summary>
         public static float CalculateStanceChange(Kingdom self, Kingdom target)
         {
             if (self == null || target == null || self == target) return 0f;
@@ -28,29 +21,23 @@ namespace WarAndAiTweaks.WarPeaceAI
             float change = 0f;
             bool atWar = self.IsAtWarWith(target);
 
-            // 1. MILITARY FACTORS (±3 points)
+            // 1. MILITARY FACTORS (±3 points) - Core strength comparison
             change += EvaluateMilitaryFactors(self, target);
 
-            // 2. GEOGRAPHIC FACTORS (±2 points)  
+            // 2. GEOGRAPHIC FACTORS (±2 points) - Simplified proximity
             change += EvaluateGeographicFactors(self, target);
 
-            // 3. DIPLOMATIC FACTORS (±2 points)
-            change += EvaluateDiplomaticFactors(self, target, atWar);
-
-            // 4. ECONOMIC FACTORS (±1.5 points)
-            change += EvaluateEconomicFactors(self, target);
-
-            // 5. PERSONALITY/RANDOM FACTORS (±1 point)
-            change += EvaluatePersonalityFactors(self, target);
-
-            // 6. WAR/PEACE MOMENTUM (±2 points)
+            // 3. WAR/PEACE MOMENTUM (±15 points) - Core objectives #3, #4
             change += EvaluateWarPeaceMomentum(self, target, atWar);
 
-            // 7. STRATEGIC SAFEGUARDS (up to -30 points)
-            change += StrategicSafeguards.GetSafeguardStanceAdjustment(self, target);
-
-            // 8. DECISION COMMITMENT (±8 points) ⬅️ ADD THIS
+            // 4. DECISION COMMITMENT (±6 points) - Core objective #6  
             change += EvaluateDecisionCommitment(self, target, atWar);
+
+            // 5. COALITION PRESSURE (±10 points) - Supports objective #2
+            change += CoalitionSystem.GetCoalitionStanceAdjustment(self, target);
+
+            // 6. SAFEGUARDS (±30 points) - Supports objectives #6, #9
+            change += StrategicSafeguards.GetSafeguardStanceAdjustment(self, target);
 
             return change;
         }
@@ -59,129 +46,48 @@ namespace WarAndAiTweaks.WarPeaceAI
         {
             float change = 0f;
 
-            // Relative military strength using the power evaluator
-            float relativeStrength = KingdomPowerEvaluator.GetRelativePower(self, target);
+            // Simple relative strength comparison
+            float powerRatio = self.TotalStrength / Math.Max(target.TotalStrength, 1f);
 
-            if (relativeStrength > 1.3f)
-                change += 1.5f; // Feeling strong, more aggressive
-            else if (relativeStrength < 0.7f)
-                change -= 1.5f; // Feeling weak, less aggressive
+            if (powerRatio > 1.3f)
+                change += 2f; // Feeling strong, more aggressive
+            else if (powerRatio < 0.7f)
+                change -= 2f; // Feeling weak, less aggressive
 
-            // Check if either kingdom has significantly stronger armies
-            if (IsStrongerArmy(self, target))
-                change += 1.0f;
-            else if (IsStrongerArmy(target, self))
-                change -= 1.0f;
+            // Multiple wars penalty for self
+            int selfWars = KingdomLogicHelpers.GetEnemyKingdoms(self).Count;
+            if (selfWars > 1)
+                change -= 2f; // Supports objective #9
+
+            // Vulnerable target bonus
+            int targetWars = KingdomLogicHelpers.GetEnemyKingdoms(target).Count;
+            if (targetWars >= 2)
+                change += 1f; // Target is distracted
 
             return MathF.Clamp(change, -3f, 3f);
         }
 
         private static float EvaluateGeographicFactors(Kingdom self, Kingdom target)
         {
-            float change = 0f;
-
-            // Bordering kingdoms are more likely to have tensions
             if (KingdomLogicHelpers.AreBordering(self, target))
+                return 1f;
+
+            float distance = GetKingdomDistance(self, target);
+            if (distance > 200f)
             {
-                change += 0.8f; // Slight tendency toward conflict
+                // Penalty scales from -1 at 200 to -4 at 400 (adjust as needed)
+                float penalty = -1f - ((distance - 200f) / 200f) * 3f;
+                return MathF.Clamp(penalty, -4f, -1f);
             }
 
-            // Distance penalty - far kingdoms are less interesting
-            float distancePenalty = KingdomLogicHelpers.GetBorderDistancePenalty(self, target, 1.5f, 100f);
-            change -= distancePenalty;
-
-            return MathF.Clamp(change, -2f, 2f);
+            return 0f;
         }
 
-        private static float EvaluateDiplomaticFactors(Kingdom self, Kingdom target, bool atWar)
+        private static float GetKingdomDistance(Kingdom self, Kingdom target)
         {
-            float change = 0f;
-
-            // Multiple wars penalty for the self kingdom
-            int selfWars = KingdomLogicHelpers.GetEnemyKingdoms(self).Count;
-            if (selfWars > 1)
-                change -= 1.5f; // Strong penalty for multiple wars
-
-            // If target is in multiple wars, they're a tempting target
-            int targetWars = KingdomLogicHelpers.GetEnemyKingdoms(target).Count;
-            if (targetWars > 2)
-                change += 0.8f; // Target is distracted
-
-            // COALITION SYSTEM: Check for snowball threats
-            float coalitionAdjustment = CoalitionSystem.GetCoalitionStanceAdjustment(self, target);
-            change += coalitionAdjustment;
-
-            return MathF.Clamp(change, -2f, 2f);
-        }
-
-        private static float EvaluateEconomicFactors(Kingdom self, Kingdom target)
-        {
-            float change = 0f;
-
-            // Wealthy targets are more tempting
-            float targetWealth = GetKingdomWealth(target);
-            float selfWealth = GetKingdomWealth(self);
-            float avgWealth = GetAverageKingdomWealth();
-
-            if (targetWealth > avgWealth * 1.4f && selfWealth < avgWealth)
-                change += 1.2f; // Poor kingdom eyeing rich kingdom
-
-            // Economic pressure on self makes more aggressive
-            if (selfWealth < avgWealth * 0.6f)
-                change += 0.8f; // Need resources, more aggressive
-
-            // Rich kingdoms might be more cautious
-            if (selfWealth > avgWealth * 1.4f)
-                change -= 0.3f; // Less need for aggression
-
-            return MathF.Clamp(change, -1.5f, 1.5f);
-        }
-
-        private static float EvaluatePersonalityFactors(Kingdom self, Kingdom target)
-        {
-            float change = 0f;
-
-            // Cultural bias (deterministic based on culture relationships)
-            float culturalBias = GetCulturalBias(self, target);
-            change += culturalBias;
-
-            // War stress bias (deterministic based on current state)
-            int currentWars = KingdomLogicHelpers.GetEnemyKingdoms(self).Count;
-            float warStressBias = currentWars > 0 ? -0.3f : 0.1f;
-            change += warStressBias;
-
-            // Leadership stability (deterministic based on kingdom traits)
-            float leadershipFactor = GetLeadershipFactor(self, target);
-            change += leadershipFactor;
-
-            return MathF.Clamp(change, -1f, 1f);
-        }
-
-        private static float GetLeadershipFactor(Kingdom self, Kingdom target)
-        {
-            if (self?.Leader == null || target?.Leader == null) return 0f;
-
-            // Deterministic "personality" based on kingdom characteristics
-            float factor = 0f;
-
-            // Kingdom size influences approach (larger = more cautious)
-            float sizeRatio = (float) self.Settlements.Count / Math.Max(target.Settlements.Count, 1);
-            if (sizeRatio > 1.2f)
-                factor -= 0.2f; // Larger kingdoms more cautious
-            else if (sizeRatio < 0.8f)
-                factor += 0.2f; // Smaller kingdoms more aggressive
-
-            // Economic position influences approach
-            float selfWealth = GetKingdomWealth(self);
-            float targetWealth = GetKingdomWealth(target);
-            float wealthRatio = selfWealth / Math.Max(targetWealth, 1f);
-
-            if (wealthRatio > 1.3f)
-                factor -= 0.1f; // Rich kingdoms less aggressive
-            else if (wealthRatio < 0.7f)
-                factor += 0.1f; // Poor kingdoms more desperate
-
-            return factor;
+            var posA = self.FactionMidSettlement?.Position2D ?? Vec2.Zero;
+            var posB = target.FactionMidSettlement?.Position2D ?? Vec2.Zero;
+            return posA.Distance(posB);
         }
 
         private static float EvaluateWarPeaceMomentum(Kingdom self, Kingdom target, bool atWar)
@@ -190,105 +96,26 @@ namespace WarAndAiTweaks.WarPeaceAI
 
             if (atWar)
             {
-                // War duration effects
                 var warDuration = GetWarDuration(self, target);
 
-                if (warDuration < 5) // Very short wars - momentum to continue
-                    change += 1.0f;
-                else if (warDuration < 15) // Short wars - slight pressure to continue
-                    change += 0.3f;
-                else if (warDuration > 30) // Long wars - war weariness begins
-                    change -= 1.0f;
-                else if (warDuration > 60) // Very long wars - strong peace pressure
-                    change -= 2.0f;
-
-                // Short war peace penalty (don't make peace too quickly)
-                change += KingdomLogicHelpers.GetShortWarPeacePenalty(self, target, 10, 1.5f);
+                // Natural gravity toward 50 days (was 30)
+                if (warDuration < 5) change += 2f;
+                else if (warDuration < 15) change += 1f;
+                else if (warDuration > 35) change -= 6f;  // Strong pull toward peace (was 20)
+                else if (warDuration > 50) change -= 12f; // Very strong after 50 days (was 30)
             }
             else
             {
-                // Peace duration effects
                 var peaceDuration = GetPeaceDuration(self, target);
 
-                if (peaceDuration < 5) // Very recent peace - strong stability bonus
-                    change -= 1.5f;
-                else if (peaceDuration < 15) // Recent peace - moderate stability bonus
-                    change -= 0.8f;
-                else if (peaceDuration > 40) // Long peace - building tensions
-                    change += 0.5f;
-                else if (peaceDuration > 80) // Very long peace - significant tensions
-                    change += 0.8f;
-
-                // Short peace war penalty (don't declare war too quickly after peace)
-                change += KingdomLogicHelpers.GetShortPeaceWarPenalty(self, target, 10, 1.5f);
+                // Natural gravity toward 50 days (was 30)
+                if (peaceDuration < 10) change -= 2f;
+                else if (peaceDuration < 20) change -= 1f;
+                else if (peaceDuration > 40) change += 4f;  // Build tension (was 25)
+                else if (peaceDuration > 50) change += 8f;  // Strong tension after 50 days (was 30)
             }
 
-            return MathF.Clamp(change, -2f, 2f);
-        }
-
-        // Helper method implementations using existing game systems
-        private static bool IsStrongerArmy(Kingdom self, Kingdom target)
-        {
-            if (target == null || self == null || target.TotalStrength <= 0)
-                return false;
-            return self.TotalStrength >= 1.2f * target.TotalStrength;
-        }
-
-        private static float GetKingdomWealth(Kingdom kingdom)
-        {
-            if (kingdom == null) return 0f;
-
-            // Calculate total economic power from settlement prosperity only
-            float totalProsperity = kingdom.Settlements
-                .Where(s => s?.Town != null) // Only towns and castles have prosperity
-                .Sum(s => s.Town.Prosperity);
-
-            return totalProsperity;
-        }
-
-        private static float GetAverageKingdomWealth()
-        {
-            var kingdoms = Kingdom.All
-                .Where(k => k != null && !k.IsEliminated && !k.IsMinorFaction)
-                .ToList();
-
-            if (kingdoms.Count == 0) return 100000f;
-
-            return (float) kingdoms.Average(k => GetKingdomWealth(k));
-        }
-
-        private static float GetCulturalBias(Kingdom self, Kingdom target)
-        {
-            // Different cultures might have natural tensions or affinities
-            // This is a simplified implementation - could be much more sophisticated
-
-            if (self?.Culture == null || target?.Culture == null)
-                return 0f;
-
-            // Same culture = slight peace bias
-            if (self.Culture == target.Culture)
-                return -0.2f;
-
-            // Different cultures = slight tension bias
-            return 0.1f;
-        }
-
-        private static float GetWarDuration(Kingdom self, Kingdom target)
-        {
-            var stance = self.GetStanceWith(target);
-            if (stance == null || !stance.IsAtWar)
-                return 0f;
-
-            return (float) (CampaignTime.Now - stance.WarStartDate).ToDays;
-        }
-
-        private static float GetPeaceDuration(Kingdom self, Kingdom target)
-        {
-            var stance = self.GetStanceWith(target);
-            if (stance == null || stance.IsAtWar)
-                return 0f;
-
-            return (float) (CampaignTime.Now - stance.PeaceDeclarationDate).ToDays;
+            return MathF.Clamp(change, -15f, 15f);
         }
 
         private static float EvaluateDecisionCommitment(Kingdom self, Kingdom target, bool atWar)
@@ -302,12 +129,14 @@ namespace WarAndAiTweaks.WarPeaceAI
                 {
                     float warDuration = (float) (CampaignTime.Now - stance.WarStartDate).ToDays;
 
-                    // Strong commitment bonus for first 15 days of war
-                    if (warDuration < 15)
-                        change += 8f; // "We just declared war, we're committed!"
-                                      // Moderate commitment for next 15 days  
-                    else if (warDuration < 30)
-                        change += 4f; // "Still building momentum"
+                    // Commitment tapers off to allow natural momentum (objective #6)
+                    if (warDuration <= 10)
+                        change += MathF.Lerp(6f, 3f, warDuration / 10f);
+                    else if (warDuration <= 20)
+                        change += MathF.Lerp(3f, 1f, (warDuration - 10f) / 10f);
+                    else if (warDuration <= 30)
+                        change += MathF.Lerp(1f, 0f, (warDuration - 20f) / 10f);
+                    // After 30 days: No commitment bonus
                 }
             }
             else
@@ -317,103 +146,170 @@ namespace WarAndAiTweaks.WarPeaceAI
                 {
                     float peaceDuration = (float) (CampaignTime.Now - stance.PeaceDeclarationDate).ToDays;
 
-                    // Strong peace commitment for first 15 days
-                    if (peaceDuration < 15)
-                        change -= 8f; // "We just made peace, let's stick with it!"
-                                      // Moderate peace commitment for next 15 days
-                    else if (peaceDuration < 30)
-                        change -= 4f; // "Still enjoying peace"
+                    // Same pattern for peace
+                    if (peaceDuration <= 10)
+                        change -= MathF.Lerp(6f, 3f, peaceDuration / 10f);
+                    else if (peaceDuration <= 20)
+                        change -= MathF.Lerp(3f, 1f, (peaceDuration - 10f) / 10f);
+                    else if (peaceDuration <= 30)
+                        change -= MathF.Lerp(1f, 0f, (peaceDuration - 20f) / 10f);
                 }
             }
 
             return change;
         }
-    }
 
-    /// <summary>
-    /// Evaluates relative power between kingdoms (moved from WarPeaceScoring.cs)
-    /// </summary>
-    internal static class KingdomPowerEvaluator
-    {
-        private static float GetOverallPowerScore(Kingdom kingdom)
+        private static float GetWarDuration(Kingdom self, Kingdom target)
         {
-            // TotalStrength
-            float strength = kingdom.TotalStrength;
-
-            // Average prosperity across all settlements
-            var settlements = kingdom.Settlements.Where(s => s != null && (s.IsTown || s.IsCastle)).ToList();
-            float avgProsperity = settlements.Count > 0
-                ? (float) settlements.Average(s => s.Town.Prosperity)
-                : 0f;
-
-            // Average wealth of all lords in the kingdom
-            var lords = kingdom.Clans
-                .Where(c => !c.IsEliminated && c.Leader != null)
-                .Select(c => c.Leader)
-                .Where(h => h.IsLord)
-                .ToList();
-
-            float avgWealth = lords.Count > 0
-                ? (float) lords.Average(l => l.Gold)
-                : 0f;
-
-            // Combine the metrics (weights can be adjusted as needed)
-            return strength + avgProsperity + avgWealth;
+            var stance = self.GetStanceWith(target);
+            if (stance == null || !stance.IsAtWar) return 0f;
+            return (float) (CampaignTime.Now - stance.WarStartDate).ToDays;
         }
 
-        public static float GetRelativePower(Kingdom kingdomA, Kingdom kingdomB)
+        private static float GetPeaceDuration(Kingdom self, Kingdom target)
         {
-            if (kingdomA == null || kingdomB == null)
-                return 1f;
-            float powerA = GetOverallPowerScore(kingdomA);
-            float powerB = GetOverallPowerScore(kingdomB);
-            if (powerB <= 0.01f) return 1f;
-            return powerA / powerB;
+            var stance = self.GetStanceWith(target);
+            if (stance == null || stance.IsAtWar) return 0f;
+            return (float) (CampaignTime.Now - stance.PeaceDeclarationDate).ToDays;
         }
-    }
+        public static string GetWarReason(Kingdom self, Kingdom target)
+        {
+            float military = EvaluateMilitaryFactors(self, target);
+            float geo = EvaluateGeographicFactors(self, target);
+            float momentum = EvaluateWarPeaceMomentum(self, target, false);
+            float commitment = EvaluateDecisionCommitment(self, target, false);
+            float coalition = CoalitionSystem.GetCoalitionStanceAdjustment(self, target);
+            float safeguard = StrategicSafeguards.GetSafeguardStanceAdjustment(self, target);
 
-    /// <summary>
-    /// Extension methods for easier strategy access
-    /// </summary>
-    public static class StrategyExtensions
-    {
-        /// <summary>
-        /// Gets the strategic stance of this kingdom toward another
-        /// </summary>
-        public static float GetStrategicStance(this Kingdom self, Kingdom target)
-        {
-            var controller = Campaign.Current?.GetCampaignBehavior<KingdomLogicController>();
-            return controller?.GetKingdomStance(self, target) ?? 50f;
+            float[] values = { military, geo, momentum, commitment, coalition, safeguard };
+            string[] reasons =
+            {
+                // MILITARY
+                military > 0
+                    ? $"Town criers proclaim that {self.Name} now marches against {target.Name}, certain their banners gather the stronger host."
+                    : $"Low whispers seep through taverns that {self.Name} strikes first against {target.Name}, alarmed by the rival’s swelling ranks.",
+
+                // GEOGRAPHY
+                geo > 0
+                    ? $"Swift riders report blood spilled along the marches, and {self.Name} sets upon {target.Name} over disputed borderlands."
+                    : $"Wayfarers marvel as {self.Name} reaches beyond distant horizons to bring war upon far-flung {target.Name}.",
+
+                // MOMENTUM
+                momentum > 0
+                    ? $"Rumour holds that brittle truces have frayed, and {self.Name} once more lifts the sword against {target.Name}."
+                    : $"Though the treaty’s ink is scarcely dry, {self.Name} has already cried for war upon {target.Name}.",
+
+                // COMMITMENT
+                commitment > 0
+                    ? $"Envoys announce that {self.Name}, hungry for new dominions, declares war upon {target.Name} with stern resolve."
+                    : $"Court scribes observe that {self.Name}, heavy-hearted yet compelled, takes up arms against {target.Name}.",
+
+                // COALITION
+                coalition > 0
+                    ? $"Heralds cry that sworn allies press {self.Name} to stand with them against the power of {target.Name}."
+                    : $"It is whispered that tangled pacts draw {self.Name} into war with {target.Name}.",
+
+                // SAFEGUARD
+                safeguard < 0
+                    ? $"Counsel once urged restraint yet {self.Name} now casts caution aside and calls for war upon {target.Name}."
+                    : $""
+            };
+
+            int idx = 0;
+            float max = 0f;
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (Math.Abs(values[i]) > Math.Abs(max))
+                {
+                    max = values[i];
+                    idx = i;
+                }
+            }
+            return reasons[idx];
         }
 
-        /// <summary>
-        /// Gets a readable description of this kingdom's stance toward another
-        /// </summary>
-        public static string GetStanceDescription(this Kingdom self, Kingdom target)
+        public static string GetPeaceReason(Kingdom self, Kingdom target)
         {
-            var controller = Campaign.Current?.GetCampaignBehavior<KingdomLogicController>();
-            var strategy = controller?.GetKingdomStrategy(self);
-            return strategy?.GetStanceDescription(target) ?? "Unknown";
+            float military = EvaluateMilitaryFactors(self, target);
+            float geo = EvaluateGeographicFactors(self, target);
+            float momentum = EvaluateWarPeaceMomentum(self, target, true);
+            float commitment = EvaluateDecisionCommitment(self, target, true);
+            float coalition = CoalitionSystem.GetCoalitionStanceAdjustment(self, target);
+            float safeguard = StrategicSafeguards.GetSafeguardStanceAdjustment(self, target);
+
+            float[] values = { military, geo, momentum, commitment, coalition, safeguard };
+            string[] reasons =
+            {
+                // MILITARY
+                military < 0
+                    ? $"Word reaches the realm that {self.Name}, mindful of {target.Name}’s iron-clad legions, has bowed to prudence and made peace."
+                    : $"Minstrels sing that {self.Name}, stout of heart and strong of arm, has nonetheless offered the olive branch to {target.Name}.",
+
+                // GEOGRAPHY
+                geo < 0
+                    ? $"Couriers tell how the perilous roads between {self.Name} and {target.Name} cooled the bloodlust, and peace now binds the two realms."
+                    : $"Border steads ring with cheer, for {self.Name} and {target.Name} have at last laid down their arms.",
+
+                // MOMENTUM
+                momentum < 0
+                    ? $"Every hearth echoes with tales of weary spearmen and empty granaries; thus {self.Name} has gladly welcomed peace with {target.Name}."
+                    : $"Steel rang long enough, and {self.Name} has now brought the struggle with {target.Name} to a swift close.",
+
+                // COMMITMENT
+                commitment < 0
+                    ? $"Envoys recount how {self.Name} stood firm in seeking concord and at last secured peace with {target.Name}."
+                    : $"Rumour holds that {self.Name} wavered, yet the scrolls of peace now bear the seals of both {self.Name} and {target.Name}.",
+
+                // COALITION
+                coalition < 0
+                    ? $"Heralds declare that loyal allies urged {self.Name} to sheathe the sword, and peace is duly sworn with {target.Name}."
+                    : $"Though comrades urged the war to linger, {self.Name} has chosen the path of peace with {target.Name}.",
+
+                // SAFEGUARD
+                safeguard < 0
+                    ? $"Royal sages persuaded {self.Name} to set aside hostilities, and so peace now holds with {target.Name}."
+                    : $""
+            };
+
+            int idx = 0;
+            float max = 0f;
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (Math.Abs(values[i]) > Math.Abs(max))
+                {
+                    max = values[i];
+                    idx = i;
+                }
+            }
+            return reasons[idx];
         }
 
-        /// <summary>
-        /// Checks if this kingdom should consider war against another based on strategy
-        /// </summary>
-        public static bool ShouldConsiderWar(this Kingdom self, Kingdom target)
+
+        public static string GetPeaceRejectionReason(Kingdom requester, Kingdom rejecter)
         {
-            var controller = Campaign.Current?.GetCampaignBehavior<KingdomLogicController>();
-            var strategy = controller?.GetKingdomStrategy(self);
-            return strategy?.ShouldConsiderWar(target) ?? false;
+            // Narrative motive for seeking peace
+            string peaceReason = GetPeaceReason(requester, rejecter);
+
+            // Main cause for rejection
+            float stance = Campaign.Current
+                                .GetCampaignBehavior<WarAndAiTweaks.WarPeaceAI.KingdomLogicController>()?
+                                .GetKingdomStance(rejecter, requester) ?? 50f;
+            float military = CalculateStanceChange(rejecter, requester);
+            bool tooSoon = StrategicSafeguards.IsDecisionTooSoon(rejecter, requester, false);
+
+            string rejectionReason;
+            if (stance > KingdomStrategy.NEUTRAL_THRESHOLD)
+                rejectionReason = $"{rejecter.Name} still nurses old grudges and will not yet be mollified.";
+            else if (military > 0)
+                rejectionReason = $"{rejecter.Name} is flushed with confidence in their muster of arms.";
+            else if (tooSoon)
+                rejectionReason = $"the wounds of war are yet raw within the halls of {rejecter.Name}.";
+            else
+                rejectionReason = $"{rejecter.Name} sees scant merit in laying down arms this day.";
+
+            // Compose the final chronicle
+            return $"Thus the chroniclers write that {requester.Name} sought peace with {rejecter.Name} because {peaceReason.TrimEnd('.')}, yet {rejectionReason}";
         }
 
-        /// <summary>
-        /// Checks if this kingdom should consider peace with another based on strategy
-        /// </summary>
-        public static bool ShouldConsiderPeace(this Kingdom self, Kingdom target)
-        {
-            var controller = Campaign.Current?.GetCampaignBehavior<KingdomLogicController>();
-            var strategy = controller?.GetKingdomStrategy(self);
-            return strategy?.ShouldConsiderPeace(target) ?? false;
-        }
     }
 }

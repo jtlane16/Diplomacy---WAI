@@ -40,11 +40,15 @@ namespace Diplomacy.Companion
             // Only track companions in actual battle missions
             if (IsBattleMission && Mission.Current?.PlayerTeam != null)
             {
+                var playerParty = Hero.MainHero.PartyBelongedTo;
                 MissionCompanions = Mission.Current.PlayerTeam.ActiveAgents
                     .Where(agent => agent?.IsHuman == true
                            && agent.Character != null
                            && agent.Character.IsHero
-                           && agent != Agent.Main)
+                           && agent != Agent.Main
+                           && agent.Character is CharacterObject co
+                           && co.HeroObject != null
+                           && co.HeroObject.Clan == Hero.MainHero.Clan)
                     .ToList();
                 IsReady = true;
             }

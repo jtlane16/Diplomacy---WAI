@@ -13,6 +13,8 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
 
     protected override void DefineClassTypes()
     {
+        // FIX: Register KingdomStrategy for save system
+        AddClassDefinition(typeof(WarAndAiTweaks.WarPeaceAI.KingdomStrategy), 145324325);
     }
 
     protected override void DefineContainerDefinitions()
@@ -36,5 +38,9 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         // UPDATED: Simplified strategic objective containers
         ConstructContainerDefinition(typeof(List<Army>));
         ConstructContainerDefinition(typeof(Dictionary<IFaction, CampaignTime>));
+
+        // Add missing containers for save system
+        ConstructContainerDefinition(typeof(Dictionary<string, WarAndAiTweaks.WarPeaceAI.KingdomStrategy>));
+        ConstructContainerDefinition(typeof(Dictionary<string, float>));
     }
 }

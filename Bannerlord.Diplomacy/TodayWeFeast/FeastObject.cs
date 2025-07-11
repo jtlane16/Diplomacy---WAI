@@ -73,15 +73,61 @@ namespace TodayWeFeast
                 MBInformationManager.AddQuickInformation(message);
             }
         }
+
         private void ShowFeastQuality()
         {
-            if (Host == Hero.MainHero)
+            if (Host != Hero.MainHero) return; // Only show for player-hosted feasts
+
+            float foodPerGuest = Guests.Count > 0 ? FoodAmount / Guests.Count : 0f;
+
+            string quality;
+            Color messageColor;
+
+            if (foodPerGuest >= 8f)
             {
-                bool isLuxury = FoodAmount > Guests.Count * 4f;
-                string quality = isLuxury ? "luxurious" : "modest";
+                quality = "magnificent";
+                messageColor = Colors.Cyan;
+            }
+            else if (foodPerGuest >= 6f)
+            {
+                quality = "luxurious";
+                messageColor = Colors.Green;
+            }
+            else if (foodPerGuest >= 4f)
+            {
+                quality = "fine";
+                messageColor = Colors.Yellow;
+            }
+            else if (foodPerGuest >= 3f)
+            {
+                quality = "modest";
+                messageColor = Colors.White;
+            }
+            else
+            {
+                quality = "meager";
+                messageColor = Colors.Red;
+            }
+
+            // Show wealth tier indicator
+            string wealthIndicator = Host.Gold > 100000f ? " (befitting your wealth)" : "";
+
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"You prepare a {quality} feast with {FoodAmount:F0} food for {Guests.Count} guests{wealthIndicator}.",
+                messageColor));
+
+            // Additional advice for poor quality feasts
+            if (foodPerGuest < 3f)
+            {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"You prepare a {quality} feast with {FoodAmount:F0} food for {Guests.Count} guests.",
-                    isLuxury ? Colors.Green : Colors.Yellow));
+                    "Consider adding more food to your party before hosting to improve feast quality.",
+                    Colors.Gray));
+            }
+            else if (foodPerGuest >= 6f)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    "Your generous provisions will surely impress the guests!",
+                    Colors.Green));
             }
         }
 
@@ -191,6 +237,7 @@ namespace TodayWeFeast
 
             foreach (var guest in Guests.ToList())
             {
+                // CRITICAL: Host never leaves through this system
                 if (guest == Host || guest == Hero.MainHero) continue;
 
                 // IMPROVEMENT: Smarter departure reasons
@@ -315,6 +362,13 @@ namespace TodayWeFeast
 
         private bool ShouldEndFeast()
         {
+            // CRITICAL: Never end feast on the same day it was created
+            if (CurrentDay == 0) return false;
+
+            // CRITICAL: Minimum feast duration - never end before day 2
+            if (CurrentDay < 2) return false;
+
+            // End if completely out of food
             if (FoodAmount <= 0) return true;
 
             // IMPROVEMENT: Adaptive duration based on success
@@ -325,7 +379,15 @@ namespace TodayWeFeast
             if (Host != Hero.MainHero)
             {
                 var endScore = GetEndingScore();
-                return endScore >= GetDynamicEndThreshold();
+                var threshold = GetDynamicEndThreshold();
+
+                // CRITICAL: Add minimum duration penalty to prevent early endings
+                if (CurrentDay <= 3)
+                {
+                    threshold += 50f; // Much harder to end early
+                }
+
+                return endScore >= threshold;
             }
 
             return false;
@@ -379,7 +441,11 @@ namespace TodayWeFeast
             if (CurrentDay > 7)
                 score += (CurrentDay - 7) * 15f;
             else if (CurrentDay <= 3)
-                score -= 20f;
+                score -= 30f; // INCREASED penalty for ending early (was -20f)
+
+            // CRITICAL: Extra penalty for very early endings
+            if (CurrentDay <= 1)
+                score -= 50f; // Heavy penalty for ending on day 0-1
 
             // Guest retention
             if (InitialGuests.Count > 0)
@@ -390,21 +456,41 @@ namespace TodayWeFeast
                 else if (retention > 0.8f && CurrentDay <= 5) score -= 15f;
             }
 
-            // Resource pressure
-            if (FoodAmount <= 0) score += 100f;
-            else if (FoodAmount < Guests.Count * 2) score += 30f;
+            // Resource pressure (but reduced for early days)
+            if (FoodAmount <= 0)
+                score += 100f;
+            else if (FoodAmount < Guests.Count * 2)
+            {
+                // Reduce food pressure early in feast
+                float foodPressure = CurrentDay <= 2 ? 15f : 30f;
+                score += foodPressure;
+            }
 
-            // Financial pressure
-            if (Host.Gold < 5000) score += 50f;
-            else if (Host.Gold < 10000) score += 25f;
+            // Financial pressure (reduced early)
+            if (Host.Gold < 5000)
+            {
+                float financialPressure = CurrentDay <= 2 ? 25f : 50f;
+                score += financialPressure;
+            }
+            else if (Host.Gold < 10000)
+            {
+                float financialPressure = CurrentDay <= 2 ? 12f : 25f;
+                score += financialPressure;
+            }
 
-            // War pressure
+            // War pressure (significantly reduced early in feast)
             var enemies = FactionManager.GetEnemyKingdoms(Kingdom);
             if (enemies.Any())
             {
-                score += enemies.Count() * 15f;
+                float warPressure = enemies.Count() * (CurrentDay <= 2 ? 5f : 15f);
+                score += warPressure;
+
                 if (Host.Clan.Settlements.Any(s => s.IsUnderSiege))
-                    score += 75f;
+                {
+                    // Even siege pressure is reduced early - host needs time to enjoy feast
+                    float siegePressure = CurrentDay <= 2 ? 30f : 75f;
+                    score += siegePressure;
+                }
             }
 
             // Trait influence

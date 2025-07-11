@@ -51,6 +51,9 @@ namespace TodayWeFeast
             CampaignEvents.OnMissionStartedEvent.AddNonSerializedListener(this, OnMissionStarted);
             CampaignEvents.OnMissionEndedEvent.AddNonSerializedListener(this, OnMissionEnded);
             CampaignEvents.OnAgentJoinedConversationEvent.AddNonSerializedListener(this, OnConversationStarted);
+
+            // CRITICAL: Hook into AI hourly tick to add feast attendance behavior
+            CampaignEvents.AiHourlyTickEvent.AddNonSerializedListener(this, OnAiHourlyTick);
         }
 
         public override void SyncData(IDataStore dataStore)
@@ -76,6 +79,91 @@ namespace TodayWeFeast
                     CreateFeast(host, kingdom);
                 }
             }
+        }
+
+        private void OnAiHourlyTick(MobileParty mobileParty, PartyThinkParams thinkParams)
+        {
+            // Only process lord parties
+            if (mobileParty?.LeaderHero == null || !mobileParty.IsLordParty) return;
+
+            var hero = mobileParty.LeaderHero;
+
+            // Check if this hero should be attending a feast
+            var targetFeast = GetFeastForHero(hero);
+            if (targetFeast != null)
+            {
+                // Calculate feast attendance score
+                var feastScore = CalculateFeastAttendanceScore(hero, targetFeast);
+
+                if (feastScore > 0f)
+                {
+                    // Add high-priority GoToSettlement behavior for the feast
+                    var feastBehavior = new AIBehaviorTuple(targetFeast.FeastSettlement, AiBehavior.GoToSettlement, false);
+                    var behaviorScore = new ValueTuple<AIBehaviorTuple, float>(feastBehavior, feastScore);
+                    thinkParams.AddBehaviorScore(behaviorScore);
+                }
+            }
+        }
+
+        private FeastObject GetFeastForHero(Hero hero)
+        {
+            // Find any active feast this hero should attend
+            return Feasts.FirstOrDefault(f => f.Guests.Contains(hero) || f.Host == hero);
+        }
+
+        private float CalculateFeastAttendanceScore(Hero hero, FeastObject feast)
+        {
+            // Host gets maximum priority - must attend their own feast
+            if (feast.Host == hero)
+            {
+                return hero.CurrentSettlement == feast.FeastSettlement ? 0f : 2500f; // Only move if not already there
+            }
+
+            // Skip player - they can decide for themselves
+            if (hero == Hero.MainHero) return 0f;
+
+            // Check if guest should attend
+            if (!feast.Guests.Contains(hero)) return 0f;
+
+            // Already at feast? No need to travel
+            if (hero.CurrentSettlement == feast.FeastSettlement) return 0f;
+
+            // Calculate distance
+            var distance = hero.PartyBelongedTo?.Position2D.Distance(feast.FeastSettlement.Position2D) ?? 1000f;
+
+            // Too far away? Don't bother
+            if (distance > 150f) return 0f; // About 5 days travel
+
+            // Base priority for feast attendance
+            float basePriority = 1000f;
+
+            // Relationship with host affects priority
+            var relation = hero.GetRelation(feast.Host);
+            basePriority += relation * 10f; // -300 to +1000 range
+
+            // Reduce priority based on distance
+            var distancePenalty = distance * 3f;
+            basePriority -= distancePenalty;
+
+            // Personality affects attendance desire
+            basePriority += hero.GetTraitLevel(DefaultTraits.Honor) * 50f;
+            basePriority += hero.GetTraitLevel(DefaultTraits.Generosity) * 30f;
+
+            // Early days of feast have higher priority
+            if (feast.CurrentDay <= 2)
+                basePriority += 200f;
+            else if (feast.CurrentDay > 5)
+                basePriority -= 100f * (feast.CurrentDay - 5);
+
+            // Urgent conditions override feast attendance
+            if (hero.PartyBelongedTo?.Food < hero.PartyBelongedTo?.Party.NumberOfAllMembers)
+                return 0f; // Food shortage
+
+            if (hero.Clan.Settlements.Any(s => s.IsUnderSiege))
+                return 0f; // Settlements under siege
+
+            // Ensure minimum threshold
+            return Math.Max(0f, basePriority);
         }
 
         private void OnSettlementEntered(MobileParty party, Settlement settlement, Hero hero)

@@ -27,11 +27,12 @@ namespace TodayWeFeast
         [SaveableField(8)] public CampaignTime EndDate;
         [SaveableField(9)] public List<Hero> InitialGuests;
 
-        public FeastObject(Hero host, Kingdom kingdom, List<Hero> guests)
+        // NEW: Main constructor that accepts settlement parameter
+        public FeastObject(Hero host, Kingdom kingdom, List<Hero> guests, Settlement feastSettlement, float foodContribution = -1)
         {
             Host = host;
             Kingdom = kingdom;
-            FeastSettlement = host.HomeSettlement;
+            FeastSettlement = feastSettlement; // FIXED: Use passed settlement instead of always using home settlement
             Guests = new List<Hero>(guests);
             InitialGuests = new List<Hero>(guests);
             FeastRoster = new ItemRoster();
@@ -39,13 +40,132 @@ namespace TodayWeFeast
             EndDate = CampaignTime.DaysFromNow(15f);
 
             Initialize();
+
+            // RESTORED: Handle food contribution
+            if (foodContribution != -1)
+            {
+                MakeAILordContributeToFeast(host, foodContribution);
+            }
+            else
+            {
+                // Player feast - use their party food
+                ContributePlayerFood();
+            }
+        }
+
+        // BACKWARD COMPATIBILITY: Old constructor for existing AI feast code
+        public FeastObject(Hero host, Kingdom kingdom, List<Hero> guests, float foodContribution = -1)
+            : this(host, kingdom, guests, host.HomeSettlement, foodContribution)
+        {
+            // Delegates to main constructor with home settlement for AI hosts
+        }
+
+        private void MakeAILordContributeToFeast(Hero hero, float foodToContribute)
+        {
+            if (hero.PartyBelongedTo?.ItemRoster == null) return;
+
+            float count = 0f;
+            var roster = hero.PartyBelongedTo.ItemRoster;
+
+            for (int i = roster.Count - 1; i >= 0; i--)
+            {
+                if (count >= foodToContribute) break;
+
+                var item = roster[i].EquipmentElement.Item;
+                if (item?.IsFood != true) continue;
+
+                int amountToTake = Math.Min(roster[i].Amount, (int) (foodToContribute - count));
+
+                if (amountToTake > 0)
+                {
+                    FeastRoster.AddToCounts(roster[i].EquipmentElement, amountToTake);
+                    roster.AddToCounts(roster[i].EquipmentElement, -amountToTake);
+                    count += amountToTake;
+                }
+            }
+
+            FoodAmount = count;
+        }
+
+        private void ContributePlayerFood()
+        {
+            if (Host != Hero.MainHero || Host.PartyBelongedTo?.ItemRoster == null) return;
+
+            // Player contributes based on guest count and wealth
+            float baseFood = Guests.Count * 3f; // 3 days worth minimum
+            float wealthMultiplier = Math.Min(2f, Host.Gold / 100000f); // Up to 2x for wealthy
+            float targetFood = Math.Max(baseFood, baseFood * wealthMultiplier);
+
+            var roster = Host.PartyBelongedTo.ItemRoster;
+            float contributed = 0f;
+
+            // Take food from player's inventory
+            for (int i = roster.Count - 1; i >= 0; i--)
+            {
+                if (contributed >= targetFood) break;
+
+                var item = roster[i].EquipmentElement.Item;
+                if (item?.IsFood != true) continue;
+
+                // Don't take ALL food - leave some for the party
+                int maxToTake = Math.Max(0, roster[i].Amount - 2); // Keep at least 2 of each food type
+                int amountToTake = Math.Min(maxToTake, (int) (targetFood - contributed));
+
+                if (amountToTake > 0)
+                {
+                    FeastRoster.AddToCounts(roster[i].EquipmentElement, amountToTake);
+                    roster.AddToCounts(roster[i].EquipmentElement, -amountToTake);
+                    contributed += amountToTake;
+                }
+            }
+
+            FoodAmount = contributed;
+
+            // Show food contribution message
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"You contribute {FoodAmount:F0} food from your party to the feast.", Colors.Yellow));
+        }
+
+        // RESTORED: Critical method for managing feast inventory
+        public void RecalculateFoodFromRoster()
+        {
+            FoodAmount = 0f;
+            if (FeastRoster != null)
+            {
+                for (int i = 0; i < FeastRoster.Count; i++)
+                {
+                    var item = FeastRoster[i];
+                    if (item.EquipmentElement.Item?.IsFood == true)
+                    {
+                        FoodAmount += item.Amount;
+                    }
+                }
+            }
+        }
+
+        // RESTORED: Show updated feast quality after player contributes food
+        public void ShowUpdatedFeastQuality()
+        {
+            if (Host != Hero.MainHero) return;
+
+            float foodPerGuest = Guests.Count > 0 ? FoodAmount / Guests.Count : 0f;
+
+            if (foodPerGuest >= 8f)
+                InformationManager.DisplayMessage(new InformationMessage("Your feast is now magnificent!", Colors.Cyan));
+            else if (foodPerGuest >= 6f)
+                InformationManager.DisplayMessage(new InformationMessage("Your feast is now luxurious.", Colors.Green));
+            else if (foodPerGuest >= 4f)
+                InformationManager.DisplayMessage(new InformationMessage("Your feast is fine quality.", Colors.Yellow));
+            else if (foodPerGuest >= 3f)
+                InformationManager.DisplayMessage(new InformationMessage("Your feast is modest quality.", Colors.White));
+            else if (foodPerGuest < 3f)
+                InformationManager.DisplayMessage(new InformationMessage("Your feast needs more food for better quality.", Colors.Red));
         }
 
         private void Initialize()
         {
             SendInvitations();
             CreateTournament();
-            ContributeFood();
             ShowFeastQuality();
         }
 
@@ -120,7 +240,7 @@ namespace TodayWeFeast
             if (foodPerGuest < 3f)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    "Consider adding more food to your party before hosting to improve feast quality.",
+                    "Consider using 'Manage feast inventory' to add more food and improve feast quality.",
                     Colors.Gray));
             }
             else if (foodPerGuest >= 6f)
@@ -145,77 +265,6 @@ namespace TodayWeFeast
             }
         }
 
-        private void ContributeFood()
-        {
-            if (Host.PartyBelongedTo?.ItemRoster == null) return;
-
-            // IMPROVEMENT: Smarter food contribution based on guest count and host wealth
-            float baseFood = Guests.Count * 3f; // 3 days worth minimum
-            float wealthMultiplier = Math.Min(3f, Host.Gold / 50000f); // Up to 3x for very wealthy
-            float targetFood = baseFood * wealthMultiplier;
-
-            // Quality over quantity for rich hosts
-            if (Host.Gold > 100000f)
-            {
-                ContributeQualityFood(targetFood);
-            }
-            else
-            {
-                ContributeBasicFood(targetFood);
-            }
-        }
-
-        private void ContributeQualityFood(float target)
-        {
-            // Prefer expensive foods (better feast quality)
-            var foods = Host.PartyBelongedTo.ItemRoster
-                .Where(item => item.EquipmentElement.Item.IsFood)
-                .OrderByDescending(item => item.EquipmentElement.Item.Value) // Expensive first
-                .ToList();
-
-            float contributed = 0f;
-            foreach (var food in foods)
-            {
-                if (contributed >= target) break;
-
-                int toTake = Math.Min(food.Amount, (int) (target - contributed));
-                if (toTake > 0)
-                {
-                    FeastRoster.AddToCounts(food.EquipmentElement, toTake);
-                    Host.PartyBelongedTo.ItemRoster.AddToCounts(food.EquipmentElement, -toTake);
-                    contributed += toTake;
-                }
-            }
-            FoodAmount = contributed * 1.2f; // Quality food lasts longer
-        }
-
-        private void ContributeBasicFood(float target)
-        {
-            // Use any available food efficiently
-            var foods = Host.PartyBelongedTo.ItemRoster
-                .Where(item => item.EquipmentElement.Item.IsFood)
-                .OrderBy(item => item.EquipmentElement.Item.Value) // Cheap first (save the good stuff)
-                .ToList();
-
-            float contributed = 0f;
-            foreach (var food in foods)
-            {
-                if (contributed >= target) break;
-
-                // Take up to 80% of each food type (don't completely empty the party)
-                int maxToTake = (int) (food.Amount * 0.8f);
-                int toTake = Math.Min(maxToTake, (int) (target - contributed));
-
-                if (toTake > 0)
-                {
-                    FeastRoster.AddToCounts(food.EquipmentElement, toTake);
-                    Host.PartyBelongedTo.ItemRoster.AddToCounts(food.EquipmentElement, -toTake);
-                    contributed += toTake;
-                }
-            }
-            FoodAmount = contributed; // Standard efficiency
-        }
-
         public void DailyTick()
         {
             CurrentDay++;
@@ -237,19 +286,18 @@ namespace TodayWeFeast
 
             foreach (var guest in Guests.ToList())
             {
-                // CRITICAL: Host never leaves through this system
                 if (guest == Host || guest == Hero.MainHero) continue;
 
-                // IMPROVEMENT: Smarter departure reasons
                 var departureReason = ShouldGuestLeave(guest);
                 if (departureReason != null)
                 {
                     departing.Add(guest);
 
+                    // ENHANCED: Show departure messages for player-hosted feasts
                     if (Host == Hero.MainHero)
                     {
                         InformationManager.DisplayMessage(new InformationMessage(
-                            $"{guest.Name} leaves: {departureReason}", Colors.Yellow));
+                            $"{guest.Name} departs the feast: {departureReason}", Colors.Yellow));
                     }
                 }
             }
@@ -322,24 +370,61 @@ namespace TodayWeFeast
             return score;
         }
 
+        // IMPROVED: More robust food consumption system
         private void ConsumeFood()
         {
             int attendingGuests = Guests.Count(g => g.CurrentSettlement == FeastSettlement);
 
-            if (attendingGuests > 0 && FoodAmount > 0)
+            if (attendingGuests > 0)
             {
-                float consumption = Math.Min(FoodAmount, attendingGuests);
-                FoodAmount -= consumption;
+                // Calculate consumption
+                float targetConsumption = attendingGuests; // 1 food per attending guest per day
+                float actualConsumption = Math.Min(FoodAmount, targetConsumption);
 
-                // Remove from roster
-                for (int i = 0; i < FeastRoster.Count && consumption > 0; i++)
+                if (actualConsumption > 0)
                 {
-                    var item = FeastRoster[i];
-                    int toRemove = Math.Min(item.Amount, (int) consumption);
-                    if (toRemove > 0)
+                    // Remove items from feast roster in order
+                    float remainingToRemove = actualConsumption;
+
+                    for (int i = FeastRoster.Count - 1; i >= 0 && remainingToRemove > 0; i--)
                     {
-                        FeastRoster.AddToCounts(item.EquipmentElement, -toRemove);
-                        consumption -= toRemove;
+                        try
+                        {
+                            var item = FeastRoster[i];
+                            if (item.EquipmentElement.Item?.IsFood == true)
+                            {
+                                int toRemove = Math.Min(item.Amount, (int) Math.Ceiling(remainingToRemove));
+
+                                if (toRemove > 0)
+                                {
+                                    FeastRoster.AddToCounts(item.EquipmentElement, -toRemove);
+                                    remainingToRemove -= toRemove;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Handle roster issues gracefully
+                            break;
+                        }
+                    }
+
+                    // Update total food amount
+                    FoodAmount = Math.Max(0, FoodAmount - actualConsumption);
+                }
+
+                // Player warnings for their own feast
+                if (Host == Hero.MainHero)
+                {
+                    if (FoodAmount <= 0)
+                    {
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            "Your feast has run out of food! Use 'Manage feast inventory' to add more or the feast will end.", Colors.Red));
+                    }
+                    else if (FoodAmount < attendingGuests * 2)
+                    {
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            $"Food running low! {FoodAmount:F0} remaining. Use 'Manage feast inventory' to add more.", Colors.Yellow));
                     }
                 }
             }
@@ -347,14 +432,49 @@ namespace TodayWeFeast
 
         private void ApplyDailyEffects()
         {
-            // Daily relation gains for attending guests
+            // AI follows same 2-day cooldown rules as player
             if (Host != Hero.MainHero)
             {
-                foreach (var guest in Guests.Where(g => g != Host && g != Hero.MainHero))
+                var attendingGuests = Guests.Where(g => g != Host && g != Hero.MainHero && g.CurrentSettlement == FeastSettlement).ToList();
+
+                foreach (var guest in attendingGuests)
                 {
-                    if (guest.CurrentSettlement == FeastSettlement)
+                    // Check if this guest can have a meaningful conversation with host today
+                    if (FeastBehavior.Instance.CanAITalkForRelation(guest, Host, this))
                     {
+                        // Apply relation bonus (same as player system)
                         ChangeRelationAction.ApplyRelationChangeBetweenHeroes(guest, Host, 1, false);
+
+                        // Record the conversation
+                        FeastBehavior.Instance.RecordAIConversation(guest, Host);
+
+                        // Optional: Show message for player-hosted feasts
+                        if (Host == Hero.MainHero)
+                        {
+                            InformationManager.DisplayMessage(new InformationMessage(
+                                $"{guest.Name} and {Host.Name} have a meaningful conversation at the feast. (+1 Relation)", Colors.Green));
+                        }
+                    }
+
+                    // AI guests also talk to each other (with same cooldown)
+                    foreach (var otherGuest in attendingGuests.Where(og => og != guest))
+                    {
+                        if (FeastBehavior.Instance.CanAITalkForRelation(guest, otherGuest, this))
+                        {
+                            // 50% chance for AI-to-AI conversations per day
+                            if (MBRandom.RandomFloat < 0.5f)
+                            {
+                                ChangeRelationAction.ApplyRelationChangeBetweenHeroes(guest, otherGuest, 1, false);
+                                FeastBehavior.Instance.RecordAIConversation(guest, otherGuest);
+
+                                // Optional: Show message for player-hosted feasts
+                                if (Host == Hero.MainHero && MBRandom.RandomFloat < 0.3f) // Only show some messages to avoid spam
+                                {
+                                    InformationManager.DisplayMessage(new InformationMessage(
+                                        $"{guest.Name} and {otherGuest.Name} bond over shared interests. (+1 Relation)", Colors.Blue));
+                                }
+                            }
+                        }
                     }
                 }
             }

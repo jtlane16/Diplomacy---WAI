@@ -6,6 +6,7 @@ using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.SaveSystem;
 
 using WarAndAiTweaks.Strategic;
+using TodayWeFeast; // ADD THIS
 
 public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
 {
@@ -15,6 +16,9 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
     {
         // FIX: Register KingdomStrategy for save system
         AddClassDefinition(typeof(WarAndAiTweaks.WarPeaceAI.KingdomStrategy), 145324325);
+
+        // ADD: Register FeastObject for save system
+        AddClassDefinition(typeof(FeastObject), 145324326);
     }
 
     protected override void DefineContainerDefinitions()
@@ -22,6 +26,7 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         // Basic containers
         ConstructContainerDefinition(typeof(List<Hero>));
         ConstructContainerDefinition(typeof(List<Kingdom>));
+        ConstructContainerDefinition(typeof(List<Settlement>)); // ADD THIS
 
         // Basic dictionaries
         ConstructContainerDefinition(typeof(Dictionary<Kingdom, double>));
@@ -42,5 +47,9 @@ public class WarAndAiTweaksSaveDefiner : SaveableTypeDefiner
         // Add missing containers for save system
         ConstructContainerDefinition(typeof(Dictionary<string, WarAndAiTweaks.WarPeaceAI.KingdomStrategy>));
         ConstructContainerDefinition(typeof(Dictionary<string, float>));
+
+        // ADD: Feast system containers
+        ConstructContainerDefinition(typeof(List<FeastObject>));
+        ConstructContainerDefinition(typeof(Dictionary<string, CampaignTime>)); // For AI conversation history
     }
 }

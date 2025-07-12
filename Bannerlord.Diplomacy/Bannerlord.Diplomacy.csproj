@@ -80,9 +80,6 @@
         <PackageReference Include="Bannerlord.ReferenceAssemblies.Sandbox" Version="$(GameVersion).*-*" PrivateAssets="All" />
     </ItemGroup>
     <ItemGroup>
-      <Reference Include="Bannerlord.Diplomacy.1.2.10">
-        <HintPath>..\..\..\Bannerlord.Diplomacy.1.2.10.dll</HintPath>
-      </Reference>
       <Reference Include="LT_Nemesis">
         <HintPath>G:\Launchers\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\LT_Nemesis\bin\Win64_Shipping_Client\LT_Nemesis.dll</HintPath>
       </Reference>

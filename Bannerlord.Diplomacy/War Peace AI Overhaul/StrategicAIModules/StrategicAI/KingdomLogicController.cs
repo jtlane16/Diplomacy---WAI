@@ -1,11 +1,15 @@
 ﻿using Diplomacy.War_Peace_AI_Overhaul.StrategicAIModules.StrategicAI;
 
+using HarmonyLib;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.SaveSystem;
@@ -16,6 +20,12 @@ namespace WarAndAiTweaks.WarPeaceAI
     {
         [SaveableField(1)]
         public Dictionary<string, KingdomStrategy> Strategies = new();
+
+        // Performance caches
+        private Dictionary<string, List<Kingdom>> _enemyKingdomsCache = new();
+        private Dictionary<string, bool> _borderingCache = new();
+        private List<Kingdom> _aiKingdomsCache = null;
+        private float _lastCacheDay = -1f;
 
         public override void RegisterEvents()
         {
@@ -42,13 +52,12 @@ namespace WarAndAiTweaks.WarPeaceAI
 
         private void DailyTick()
         {
+            // Clear daily caches
+            InvalidateDailyCaches();
+
             UpdateAllKingdomStrategies();
 
-            var aiKingdoms = Kingdom.All
-                .Where(k => k != null && !k.IsEliminated && !k.IsMinorFaction
-                           && k.Leader != null && k.Leader != Hero.MainHero)
-                .ToList();
-
+            var aiKingdoms = GetAIKingdomsCached();
             if (aiKingdoms.Count == 0) return;
 
             // Process up to 3 kingdoms per day
@@ -65,6 +74,34 @@ namespace WarAndAiTweaks.WarPeaceAI
             {
                 ProcessKingdomDecisions(kingdom);
             }
+        }
+
+        private void InvalidateDailyCaches()
+        {
+            float currentDay = (float) CampaignTime.Now.ToDays;
+
+            // Clear daily caches
+            _enemyKingdomsCache.Clear();
+
+            // Keep AI kingdoms cache and bordering cache for 1 day
+            if (currentDay - _lastCacheDay > 1f)
+            {
+                _aiKingdomsCache = null;
+                _borderingCache.Clear();
+                _lastCacheDay = currentDay;
+            }
+        }
+
+        private List<Kingdom> GetAIKingdomsCached()
+        {
+            if (_aiKingdomsCache == null)
+            {
+                _aiKingdomsCache = Kingdom.All
+                    .Where(k => k != null && !k.IsEliminated && !k.IsMinorFaction
+                               && k.Leader != null && k.Leader != Hero.MainHero)
+                    .ToList();
+            }
+            return _aiKingdomsCache;
         }
 
         private void UpdateAllKingdomStrategies()
@@ -102,7 +139,7 @@ namespace WarAndAiTweaks.WarPeaceAI
             }
 
             // Process war decisions if not overwhelmed
-            var currentWars = KingdomLogicHelpers.GetEnemyKingdoms(selectedKingdom).Count;
+            var currentWars = GetEnemyKingdomsCached(selectedKingdom).Count;
             if (currentWars <= 1)
             {
                 var warTargets = strategy.GetWarTargets(selectedKingdom);
@@ -113,6 +150,131 @@ namespace WarAndAiTweaks.WarPeaceAI
                 }
             }
         }
+
+        // OPTIMIZATION: Cached enemy kingdoms lookup
+        public List<Kingdom> GetEnemyKingdomsCached(Kingdom kingdom)
+        {
+            if (kingdom == null) return new List<Kingdom>();
+
+            if (!_enemyKingdomsCache.TryGetValue(kingdom.StringId, out var enemies))
+            {
+                enemies = Kingdom.All
+                    .Where(k => k != null && k != kingdom && !k.IsEliminated && !k.IsMinorFaction
+                               && k.Leader != null && kingdom.IsAtWarWith(k))
+                    .ToList();
+                _enemyKingdomsCache[kingdom.StringId] = enemies;
+            }
+
+            return enemies;
+        }
+
+        // OPTIMIZATION: Cached bordering check
+        public bool AreBorderingCached(Kingdom kingdomA, Kingdom kingdomB)
+        {
+            if (kingdomA == null || kingdomB == null || kingdomA == kingdomB)
+                return false;
+
+            string cacheKey = $"{kingdomA.StringId}_{kingdomB.StringId}";
+            string reverseCacheKey = $"{kingdomB.StringId}_{kingdomA.StringId}";
+
+            if (_borderingCache.TryGetValue(cacheKey, out bool result))
+                return result;
+            if (_borderingCache.TryGetValue(reverseCacheKey, out result))
+                return result;
+
+            // Optimized bordering check
+            result = AreBorderingOptimized(kingdomA, kingdomB);
+            _borderingCache[cacheKey] = result;
+
+            return result;
+        }
+
+        private bool AreBorderingOptimized(Kingdom kingdomA, Kingdom kingdomB)
+        {
+            // Get the closest settlements between the two kingdoms
+            var settlementsA = kingdomA.Settlements.Where(s => s.IsFortification || s.IsVillage).Take(8);
+            var settlementsB = kingdomB.Settlements.Where(s => s.IsFortification || s.IsVillage).Take(8);
+
+            if (!settlementsA.Any() || !settlementsB.Any()) return false;
+
+            // Find minimum distance between any settlements of the two kingdoms
+            float minDistanceSquared = float.MaxValue;
+            foreach (var settlementA in settlementsA)
+            {
+                foreach (var settlementB in settlementsB)
+                {
+                    float distSquared = settlementA.Position2D.DistanceSquared(settlementB.Position2D);
+                    if (distSquared < minDistanceSquared)
+                        minDistanceSquared = distSquared;
+                }
+            }
+
+            // Compare against map-relative threshold
+            float borderingThresholdSquared = GetBorderingThresholdSquared();
+            return minDistanceSquared <= borderingThresholdSquared;
+        }
+
+        // Cache for bordering threshold
+        private static float _cachedBorderingThresholdSquared = -1f;
+        private static float _lastBorderingThresholdCalculation = -1f;
+
+        private float GetBorderingThresholdSquared()
+        {
+            float currentDay = (float) CampaignTime.Now.ToDays;
+
+            // Recalculate threshold every 3 days
+            if (_cachedBorderingThresholdSquared < 0 || currentDay - _lastBorderingThresholdCalculation > 3f)
+            {
+                _cachedBorderingThresholdSquared = CalculateBorderingThresholdSquared();
+                _lastBorderingThresholdCalculation = currentDay;
+            }
+
+            return _cachedBorderingThresholdSquared;
+        }
+
+        private float CalculateBorderingThresholdSquared()
+        {
+            var kingdoms = Kingdom.All.Where(k => !k.IsEliminated && !k.IsMinorFaction && k.Leader != null).ToList();
+
+            if (kingdoms.Count < 2) return 1000000f; // 1000^2 fallback
+
+            // Find the minimum distance between any two settlements of different kingdoms
+            // This gives us the "closest neighbors" distance on this map
+            float minGlobalDistanceSquared = float.MaxValue;
+            int sampleCount = 0;
+            const int maxSamples = 50; // Limit samples for performance
+
+            foreach (var kingdom in kingdoms.Take(10)) // Sample from first 10 kingdoms only
+            {
+                var settlements = kingdom.Settlements.Where(s => s.IsFortification || s.IsVillage).Take(3);
+
+                foreach (var settlement in settlements)
+                {
+                    foreach (var otherKingdom in kingdoms.Where(k => k != kingdom).Take(5)) // Check against 5 other kingdoms
+                    {
+                        var otherSettlements = otherKingdom.Settlements.Where(s => s.IsFortification || s.IsVillage).Take(3);
+
+                        foreach (var otherSettlement in otherSettlements)
+                        {
+                            float distSquared = settlement.Position2D.DistanceSquared(otherSettlement.Position2D);
+                            if (distSquared < minGlobalDistanceSquared)
+                                minGlobalDistanceSquared = distSquared;
+
+                            sampleCount++;
+                            if (sampleCount >= maxSamples) break;
+                        }
+                        if (sampleCount >= maxSamples) break;
+                    }
+                    if (sampleCount >= maxSamples) break;
+                }
+                if (sampleCount >= maxSamples) break;
+            }
+
+            // Use 1.5x the minimum distance as the bordering threshold
+            // This means settlements need to be closer than 1.5x the tightest spacing on the map
+            return minGlobalDistanceSquared * 2.25f; // 1.5^2 = 2.25
+        }
+
         private bool ProcessWarDecision(Kingdom self, Kingdom target, KingdomStrategy strategy)
         {
             // Feast integration: Prevent war declaration if a feast is active for this kingdom
@@ -194,4 +356,13 @@ namespace WarAndAiTweaks.WarPeaceAI
             strategy?.AdjustStance(target, delta);
         }
     }
+    [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomWarDecision")]
+    public class Patch_DisableRandomWar { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
+    [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "ConsiderWar")]
+    public class Patch_DisableConsiderWar { private static bool Prefix(Clan clan, Kingdom kingdom, IFaction otherFaction) { return false; } }
+
+    [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomPeaceDecision")]
+    public class Patch_DisableRandomPeace { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
+    [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "ConsiderPeace")]
+    public class Patch_DisableConsiderPeace { private static bool Prefix(Clan clan, Clan otherClan, Kingdom kingdom, IFaction otherFaction, out MakePeaceKingdomDecision decision) { decision = null; return false; } }
 }

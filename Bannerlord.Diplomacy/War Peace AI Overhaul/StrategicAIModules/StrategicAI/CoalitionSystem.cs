@@ -8,7 +8,7 @@ using MathF = TaleWorlds.Library.MathF;
 namespace WarAndAiTweaks.WarPeaceAI
 {
     /// <summary>
-    /// Simple coalition system: Stop the snowballing kingdom
+    /// Optimized coalition system with caching to prevent recalculation
     /// </summary>
     public static class CoalitionSystem
     {
@@ -16,42 +16,72 @@ namespace WarAndAiTweaks.WarPeaceAI
         private const float TERRITORY_SNOWBALL_THRESHOLD = 1.3f;   // 30% more territory than average
         private const float COALITION_PRESSURE = 8f;               // Stance adjustment strength
 
+        // Performance caches - static for global access
+        private static Kingdom _cachedBiggestThreat = null;
+        private static float _lastThreatCalculationDay = -1f;
+        private static float _cachedAvgStrength = 0f;
+        private static float _cachedAvgTerritory = 0f;
+
         /// <summary>
-        /// Find the biggest threat that needs coalition response
+        /// Find the biggest threat that needs coalition response (cached)
         /// </summary>
         public static Kingdom GetBiggestThreat()
         {
+            float currentDay = (float) CampaignTime.Now.ToDays;
+
+            // Cache threat calculation for 1 day to avoid expensive recalculation
+            if (_cachedBiggestThreat != null && currentDay - _lastThreatCalculationDay < 1f)
+            {
+                // Verify cached threat is still valid
+                if (!_cachedBiggestThreat.IsEliminated && _cachedBiggestThreat.Leader != null)
+                    return _cachedBiggestThreat;
+            }
+
+            // Recalculate threat
             var kingdoms = Kingdom.All
                 .Where(k => !k.IsEliminated && !k.IsMinorFaction && k.Leader != null)
                 .ToList();
 
-            if (kingdoms.Count < 3) return null; // Need at least 3 kingdoms for coalitions
+            if (kingdoms.Count < 3)
+            {
+                _cachedBiggestThreat = null;
+                return null;
+            }
 
-            float avgStrength = (float) kingdoms.Average(k => k.TotalStrength);
-            float avgTerritory = (float) kingdoms.Average(k => k.Settlements.Count);
+            // Cache averages for reuse
+            _cachedAvgStrength = (float) kingdoms.Average(k => k.TotalStrength);
+            _cachedAvgTerritory = (float) kingdoms.Average(k => k.Settlements.Count);
 
             // Find kingdoms that meet threat criteria
             var threats = kingdoms.Where(k =>
-                k.TotalStrength >= avgStrength * STRENGTH_SNOWBALL_THRESHOLD ||
-                (k.Settlements.Count >= avgTerritory * TERRITORY_SNOWBALL_THRESHOLD &&
-                 k.TotalStrength >= avgStrength * 1.2f) // Minimum strength requirement
+                k.TotalStrength >= _cachedAvgStrength * STRENGTH_SNOWBALL_THRESHOLD ||
+                (k.Settlements.Count >= _cachedAvgTerritory * TERRITORY_SNOWBALL_THRESHOLD &&
+                 k.TotalStrength >= _cachedAvgStrength * 1.2f) // Minimum strength requirement
             ).ToList();
 
-            return threats.OrderByDescending(k => k.TotalStrength).FirstOrDefault();
+            _cachedBiggestThreat = threats.OrderByDescending(k => k.TotalStrength).FirstOrDefault();
+            _lastThreatCalculationDay = currentDay;
+
+            return _cachedBiggestThreat;
         }
 
         /// <summary>
-        /// Coalition stance adjustment: Unite against the threat
+        /// Coalition stance adjustment: Unite against the threat (optimized)
         /// </summary>
         public static float GetCoalitionStanceAdjustment(Kingdom self, Kingdom target)
         {
-            var biggestThreat = GetBiggestThreat();
+            var biggestThreat = GetBiggestThreat(); // Now cached
             if (biggestThreat == null || self == biggestThreat) return 0f;
 
-            var kingdoms = Kingdom.All.Where(k => !k.IsEliminated && !k.IsMinorFaction && k.Leader != null).ToList();
-            if (kingdoms.Count == 0) return 0f;
+            // Use cached average strength if available
+            float avgStrength = _cachedAvgStrength;
+            if (avgStrength <= 0f)
+            {
+                var kingdoms = Kingdom.All.Where(k => !k.IsEliminated && !k.IsMinorFaction && k.Leader != null).ToList();
+                if (kingdoms.Count == 0) return 0f;
+                avgStrength = (float) kingdoms.Average(k => k.TotalStrength);
+            }
 
-            float avgStrength = (float) kingdoms.Average(k => k.TotalStrength);
             float threatRatio = biggestThreat.TotalStrength / avgStrength;
 
             // Gradual coalition buildup (1.3x = 0%, 1.8x = 100%)
@@ -64,11 +94,11 @@ namespace WarAndAiTweaks.WarPeaceAI
         }
 
         /// <summary>
-        /// Emergency peace: Should these kingdoms stop fighting due to bigger threat?
+        /// Emergency peace: Should these kingdoms stop fighting due to bigger threat? (optimized)
         /// </summary>
         public static bool ShouldForceEmergencyPeace(Kingdom kingdom1, Kingdom kingdom2)
         {
-            var biggestThreat = GetBiggestThreat();
+            var biggestThreat = GetBiggestThreat(); // Now cached
             if (biggestThreat == null) return false;
 
             // Neither kingdom should be the threat
@@ -77,20 +107,35 @@ namespace WarAndAiTweaks.WarPeaceAI
             // They must be at war
             if (!kingdom1.IsAtWarWith(kingdom2)) return false;
 
-            // The threat must be extreme (2x average strength)
-            var kingdoms = Kingdom.All.Where(k => !k.IsEliminated && !k.IsMinorFaction && k.Leader != null).ToList();
-            if (kingdoms.Count == 0) return false;
+            // Use cached average strength if available
+            float avgStrength = _cachedAvgStrength;
+            if (avgStrength <= 0f)
+            {
+                var kingdoms = Kingdom.All.Where(k => !k.IsEliminated && !k.IsMinorFaction && k.Leader != null).ToList();
+                if (kingdoms.Count == 0) return false;
+                avgStrength = (float) kingdoms.Average(k => k.TotalStrength);
+            }
 
-            float avgStrength = (float) kingdoms.Average(k => k.TotalStrength);
             return biggestThreat.TotalStrength >= avgStrength * 2.0f; // 2x stronger = extreme threat
         }
 
         /// <summary>
-        /// Check if a kingdom is the current snowball threat
+        /// Check if a kingdom is the current snowball threat (optimized)
         /// </summary>
         public static bool IsSnowballThreat(Kingdom kingdom)
         {
-            return GetBiggestThreat() == kingdom;
+            return GetBiggestThreat() == kingdom; // Now cached
+        }
+
+        /// <summary>
+        /// Force cache invalidation (call when kingdoms are eliminated or major changes occur)
+        /// </summary>
+        public static void InvalidateCache()
+        {
+            _cachedBiggestThreat = null;
+            _lastThreatCalculationDay = -1f;
+            _cachedAvgStrength = 0f;
+            _cachedAvgTerritory = 0f;
         }
     }
 }

@@ -13,7 +13,7 @@ using MathF = TaleWorlds.Library.MathF;
 namespace WarAndAiTweaks.WarPeaceAI
 {
     /// <summary>
-    /// Calculates daily stance changes based on core factors only
+    /// Calculates daily stance changes based on core factors only (optimized)
     /// </summary>
     public static class StrategyEvaluator
     {
@@ -57,12 +57,12 @@ namespace WarAndAiTweaks.WarPeaceAI
             else if (powerRatio < 0.7f)
                 change -= 2f; // Feeling weak, less aggressive
 
-            // Multiple wars penalty for self
+            // Multiple wars penalty for self (using optimized method)
             int selfWars = KingdomLogicHelpers.GetEnemyKingdoms(self).Count;
             if (selfWars > 1)
                 change -= 2f; // Supports objective #9
 
-            // Vulnerable target bonus
+            // Vulnerable target bonus (using optimized method)
             int targetWars = KingdomLogicHelpers.GetEnemyKingdoms(target).Count;
             if (targetWars >= 2)
                 change += 1f; // Target is distracted
@@ -72,14 +72,19 @@ namespace WarAndAiTweaks.WarPeaceAI
 
         private static float EvaluateGeographicFactors(Kingdom self, Kingdom target)
         {
+            // Use optimized/cached bordering check
             if (KingdomLogicHelpers.AreBordering(self, target))
                 return 1f;
 
+            // For distant kingdoms, apply penalty based on relative distance to average
             float distance = GetKingdomDistance(self, target);
-            if (distance > 200f)
+            float avgDistance = GetAverageKingdomDistance();
+
+            if (distance > avgDistance * 1.5f) // More than 1.5x average distance
             {
-                // Penalty scales from -1 at 200 to -4 at 400 (adjust as needed)
-                float penalty = -1f - ((distance - 200f) / 200f) * 3f;
+                // Penalty scales from -1 at 1.5x avg to -4 at 3x avg
+                float distanceRatio = distance / avgDistance;
+                float penalty = -1f - ((distanceRatio - 1.5f) / 1.5f) * 3f;
                 return MathF.Clamp(penalty, -4f, -1f);
             }
 
@@ -93,6 +98,46 @@ namespace WarAndAiTweaks.WarPeaceAI
             return posA.Distance(posB);
         }
 
+        // Cache for average distance calculation
+        private static float _cachedAvgDistance = -1f;
+        private static float _lastAvgDistanceCalculation = -1f;
+
+        private static float GetAverageKingdomDistance()
+        {
+            float currentDay = (float) CampaignTime.Now.ToDays;
+
+            // Recalculate average distance every 5 days
+            if (_cachedAvgDistance < 0 || currentDay - _lastAvgDistanceCalculation > 5f)
+            {
+                var kingdoms = Kingdom.All.Where(k => !k.IsEliminated && !k.IsMinorFaction && k.Leader != null).ToList();
+
+                if (kingdoms.Count < 2)
+                {
+                    _cachedAvgDistance = 1000f; // Default fallback
+                }
+                else
+                {
+                    float totalDistance = 0f;
+                    int pairCount = 0;
+
+                    for (int i = 0; i < kingdoms.Count; i++)
+                    {
+                        for (int j = i + 1; j < kingdoms.Count; j++)
+                        {
+                            totalDistance += GetKingdomDistance(kingdoms[i], kingdoms[j]);
+                            pairCount++;
+                        }
+                    }
+
+                    _cachedAvgDistance = pairCount > 0 ? totalDistance / pairCount : 1000f;
+                }
+
+                _lastAvgDistanceCalculation = currentDay;
+            }
+
+            return _cachedAvgDistance;
+        }
+
         private static float EvaluateWarPeaceMomentum(Kingdom self, Kingdom target, bool atWar)
         {
             float change = 0f;
@@ -101,24 +146,64 @@ namespace WarAndAiTweaks.WarPeaceAI
             {
                 var warDuration = GetWarDuration(self, target);
 
-                // Natural gravity toward 50 days (was 30)
+                // Natural gravity toward 60 days (+10 days from original 50)
                 if (warDuration < 5) change += 2f;
                 else if (warDuration < 15) change += 1f;
-                else if (warDuration > 35) change -= 6f;  // Strong pull toward peace (was 20)
-                else if (warDuration > 50) change -= 12f; // Very strong after 50 days (was 30)
+                else if (warDuration > 45) // was 35, now +10 days
+                {
+                    // Check if there's been actual fighting before applying war fatigue
+                    float baseFatigue = -6f; // Strong pull toward peace
+                    float adjustedFatigue = GetWarFatigueAdjustment(self, target, baseFatigue);
+                    change += adjustedFatigue;
+                }
+                else if (warDuration > 60) // was 50, now +10 days
+                {
+                    // Very strong fatigue after 60 days, but still activity-dependent
+                    float baseFatigue = -12f;
+                    float adjustedFatigue = GetWarFatigueAdjustment(self, target, baseFatigue);
+                    change += adjustedFatigue;
+                }
             }
             else
             {
                 var peaceDuration = GetPeaceDuration(self, target);
 
-                // Natural gravity toward 50 days (was 30)
+                // Natural gravity toward 60 days (+10 days from original 50)
                 if (peaceDuration < 10) change -= 2f;
                 else if (peaceDuration < 20) change -= 1f;
-                else if (peaceDuration > 40) change += 4f;  // Build tension (was 25)
-                else if (peaceDuration > 50) change += 8f;  // Strong tension after 50 days (was 30)
+                else if (peaceDuration > 50) change += 4f;  // was 40, now +10 days
+                else if (peaceDuration > 60) change += 8f;  // was 50, now +10 days
             }
 
             return MathF.Clamp(change, -15f, 15f);
+        }
+
+        private static float GetWarFatigueAdjustment(Kingdom self, Kingdom target, float baseFatigue)
+        {
+            var stance = self.GetStanceWith(target);
+            if (stance == null || !stance.IsAtWar) return baseFatigue;
+
+            // Get total war activity from both sides
+            int totalCasualties = stance.Casualties1 + stance.Casualties2;
+            int totalSieges = stance.SuccessfulSieges1 + stance.SuccessfulSieges2;
+
+            // Simple logic: if there's been minimal actual fighting, why be tired of war?
+            bool minimalFighting = totalCasualties < 200 && totalSieges == 0;
+            bool lightFighting = totalCasualties < 1000 && totalSieges <= 1;
+
+            if (minimalFighting)
+            {
+                // "What war?" - almost no fatigue for paper wars
+                return baseFatigue * 0.2f;
+            }
+            else if (lightFighting)
+            {
+                // Some fighting but not much - reduced fatigue
+                return baseFatigue * 0.5f;
+            }
+
+            // Real war with significant casualties/sieges - full fatigue
+            return baseFatigue;
         }
 
         private static float EvaluateDecisionCommitment(Kingdom self, Kingdom target, bool atWar)
@@ -133,12 +218,12 @@ namespace WarAndAiTweaks.WarPeaceAI
                     float warDuration = (float) (CampaignTime.Now - stance.WarStartDate).ToDays;
 
                     // Commitment tapers off to allow natural momentum (objective #6)
-                    if (warDuration <= 10)
-                        change += MathF.Lerp(6f, 3f, warDuration / 10f);
-                    else if (warDuration <= 20)
-                        change += MathF.Lerp(3f, 1f, (warDuration - 10f) / 10f);
-                    else if (warDuration <= 30)
-                        change += MathF.Lerp(1f, 0f, (warDuration - 20f) / 10f);
+                    if (warDuration <= 20)        // was 10, now +10
+                        change += MathF.Lerp(6f, 3f, warDuration / 20f);
+                    else if (warDuration <= 30)   // was 20, now +10
+                        change += MathF.Lerp(3f, 1f, (warDuration - 20f) / 10f);
+                    else if (warDuration <= 40)   // was 30, now +10
+                        change += MathF.Lerp(1f, 0f, (warDuration - 30f) / 10f);
                     // After 30 days: No commitment bonus
                 }
             }
@@ -190,7 +275,7 @@ namespace WarAndAiTweaks.WarPeaceAI
                 // MILITARY
                 military > 0
                     ? $"Town criers proclaim that {self.Name} now marches against {target.Name}, certain their banners gather the stronger host."
-                    : $"Low whispers seep through taverns that {self.Name} strikes first against {target.Name}, alarmed by the rival’s swelling ranks.",
+                    : $"Low whispers seep through taverns that {self.Name} strikes first against {target.Name}, alarmed by the rival's swelling ranks.",
 
                 // GEOGRAPHY
                 geo > 0
@@ -200,7 +285,7 @@ namespace WarAndAiTweaks.WarPeaceAI
                 // MOMENTUM
                 momentum > 0
                     ? $"Rumour holds that brittle truces have frayed, and {self.Name} once more lifts the sword against {target.Name}."
-                    : $"Though the treaty’s ink is scarcely dry, {self.Name} has already cried for war upon {target.Name}.",
+                    : $"Though the treaty's ink is scarcely dry, {self.Name} has already cried for war upon {target.Name}.",
 
                 // COMMITMENT
                 commitment > 0
@@ -245,7 +330,7 @@ namespace WarAndAiTweaks.WarPeaceAI
             {
                 // MILITARY
                 military < 0
-                    ? $"Word reaches the realm that {self.Name}, mindful of {target.Name}’s iron-clad legions, has bowed to prudence and made peace."
+                    ? $"Word reaches the realm that {self.Name}, mindful of {target.Name}'s iron-clad legions, has bowed to prudence and made peace."
                     : $"Minstrels sing that {self.Name}, stout of heart and strong of arm, has nonetheless offered the olive branch to {target.Name}.",
 
                 // GEOGRAPHY

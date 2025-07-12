@@ -16,7 +16,6 @@ using TaleWorlds.MountAndBlade;
 
 using TodayWeFeast;
 
-using WarAndAiTweaks.Strategic;
 using WarAndAiTweaks.Strategic.Marshal;
 using WarAndAiTweaks.Systems;
 using WarAndAiTweaks.WarPeaceAI;

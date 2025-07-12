@@ -11,7 +11,7 @@ using MathF = TaleWorlds.Library.MathF;
 namespace WarAndAiTweaks.WarPeaceAI
 {
     /// <summary>
-    /// Simple safeguards to prevent AI from making terrible decisions
+    /// Simple safeguards to prevent AI from making terrible decisions (optimized)
     /// </summary>
     public static class StrategicSafeguards
     {
@@ -37,7 +37,7 @@ namespace WarAndAiTweaks.WarPeaceAI
             if (!hasViableTarget)
                 return false;
 
-            // Core rule: No multiple wars unless coalition emergency
+            // Core rule: No multiple wars unless coalition emergency (using optimized method)
             int currentWars = KingdomLogicHelpers.GetEnemyKingdoms(self).Count;
             if (currentWars >= MAX_CURRENT_WARS)
             {
@@ -98,13 +98,13 @@ namespace WarAndAiTweaks.WarPeaceAI
         }
 
         /// <summary>
-        /// Additional stance pressure to guide decisions
+        /// Additional stance pressure to guide decisions (optimized)
         /// </summary>
         public static float GetSafeguardStanceAdjustment(Kingdom self, Kingdom target)
         {
             float adjustment = 0f;
 
-            // Strong penalty for multiple wars (supports objective #9)
+            // Strong penalty for multiple wars (supports objective #9) - using optimized method
             int currentWars = KingdomLogicHelpers.GetEnemyKingdoms(self).Count;
             if (currentWars > 0 && !self.IsAtWarWith(target))
             {
@@ -119,10 +119,10 @@ namespace WarAndAiTweaks.WarPeaceAI
                 {
                     float warDuration = (float) (CampaignTime.Now - stance.WarStartDate).ToDays;
 
-                    if (warDuration > 50) adjustment -= 5f;   // was 30
-                    if (warDuration > 80) adjustment -= 10f;  // was 60
-                    if (warDuration > 110) adjustment -= 15f; // was 90
-                    if (warDuration > 140) adjustment -= 25f; // was 120
+                    if (warDuration > 60) adjustment -= 5f;   // was 50, now +10
+                    if (warDuration > 90) adjustment -= 10f;  // was 80, now +10  
+                    if (warDuration > 120) adjustment -= 15f; // was 110, now +10
+                    if (warDuration > 150) adjustment -= 25f; // was 140, now +10
                 }
             }
 

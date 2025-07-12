@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Diplomacy.War_Peace_AI_Overhaul.StrategicAIModules.StrategicAI;
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -27,6 +29,8 @@ namespace TodayWeFeast
         [SaveableField(1)] public List<FeastObject> Feasts;
         [SaveableField(2)] public Dictionary<Kingdom, double> timeSinceLastFeast;
         [SaveableField(3)] public Dictionary<Hero, CampaignTime> _lastTalkedToLords;
+        [SaveableField(4)] public Dictionary<string, CampaignTime> _aiConversationHistory;
+
 
         private SoundEvent _ambienceLoop, _tavernTrack, _musicianTrack;
         public static FeastBehavior Instance { get; private set; }
@@ -37,6 +41,7 @@ namespace TodayWeFeast
             Feasts = new List<FeastObject>();
             timeSinceLastFeast = new Dictionary<Kingdom, double>();
             _lastTalkedToLords = new Dictionary<Hero, CampaignTime>();
+            _aiConversationHistory = new Dictionary<string, CampaignTime>(); // FIXED: Flattened structure
         }
 
         public override void RegisterEvents()
@@ -61,6 +66,7 @@ namespace TodayWeFeast
             dataStore.SyncData("Feasts", ref Feasts);
             dataStore.SyncData("timeSinceLastFeast", ref timeSinceLastFeast);
             dataStore.SyncData("lastTalkedToLords", ref _lastTalkedToLords);
+            dataStore.SyncData("aiConversationHistory", ref _aiConversationHistory); // FIXED: Single dictionary
         }
 
         #region Event Handlers
@@ -97,12 +103,47 @@ namespace TodayWeFeast
 
                 if (feastScore > 0f)
                 {
-                    // Add high-priority GoToSettlement behavior for the feast
-                    var feastBehavior = new AIBehaviorTuple(targetFeast.FeastSettlement, AiBehavior.GoToSettlement, false);
+                    AIBehaviorTuple feastBehavior;
+
+                    // If already at feast, add Hold behavior to stay there
+                    if (hero.CurrentSettlement == targetFeast.FeastSettlement)
+                    {
+                        feastBehavior = new AIBehaviorTuple(targetFeast.FeastSettlement, AiBehavior.Hold, false);
+                    }
+                    else
+                    {
+                        // If not at feast, add GoToSettlement behavior
+                        feastBehavior = new AIBehaviorTuple(targetFeast.FeastSettlement, AiBehavior.GoToSettlement, false);
+                    }
+
                     var behaviorScore = new ValueTuple<AIBehaviorTuple, float>(feastBehavior, feastScore);
                     thinkParams.AddBehaviorScore(behaviorScore);
                 }
             }
+        }
+
+        private string GetConversationKey(Hero speaker, Hero listener)
+        {
+            // Create a unique key for the conversation pair (order matters for directed conversations)
+            return $"{speaker.StringId}:{listener.StringId}";
+        }
+
+        public bool CanAITalkForRelation(Hero speaker, Hero listener, FeastObject feast)
+        {
+            string key = GetConversationKey(speaker, listener);
+
+            if (!_aiConversationHistory.TryGetValue(key, out var lastTalk))
+                return true;
+
+            // Same 2-day rule for AI during feasts
+            float cooldownDays = feast != null ? 2f : 3f;
+            return (CampaignTime.Now.ToDays - lastTalk.ToDays) >= cooldownDays;
+        }
+
+        public void RecordAIConversation(Hero speaker, Hero listener)
+        {
+            string key = GetConversationKey(speaker, listener);
+            _aiConversationHistory[key] = CampaignTime.Now;
         }
 
         private FeastObject GetFeastForHero(Hero hero)
@@ -116,7 +157,8 @@ namespace TodayWeFeast
             // Host gets maximum priority - must attend their own feast
             if (feast.Host == hero)
             {
-                return hero.CurrentSettlement == feast.FeastSettlement ? 0f : 2500f; // Only move if not already there
+                // FIXED: Host should always have high priority to stay at feast
+                return hero.CurrentSettlement == feast.FeastSettlement ? 3000f : 3500f;
             }
 
             // Skip player - they can decide for themselves
@@ -125,35 +167,38 @@ namespace TodayWeFeast
             // Check if guest should attend
             if (!feast.Guests.Contains(hero)) return 0f;
 
-            // Already at feast? No need to travel
-            if (hero.CurrentSettlement == feast.FeastSettlement) return 0f;
+            // FIXED: High priority to stay at feast if already there
+            if (hero.CurrentSettlement == feast.FeastSettlement)
+            {
+                return CalculateStayAtFeastScore(hero, feast);
+            }
 
-            // Calculate distance
+            // Calculate distance for travel
             var distance = hero.PartyBelongedTo?.Position2D.Distance(feast.FeastSettlement.Position2D) ?? 1000f;
 
             // Too far away? Don't bother
             if (distance > 150f) return 0f; // About 5 days travel
 
-            // Base priority for feast attendance
-            float basePriority = 1000f;
+            // Base priority for feast attendance - INCREASED significantly
+            float basePriority = 2000f; // Increased from 1000f
 
             // Relationship with host affects priority
             var relation = hero.GetRelation(feast.Host);
-            basePriority += relation * 10f; // -300 to +1000 range
+            basePriority += relation * 15f; // Increased from 10f
 
             // Reduce priority based on distance
-            var distancePenalty = distance * 3f;
+            var distancePenalty = distance * 2f; // Reduced from 3f
             basePriority -= distancePenalty;
 
             // Personality affects attendance desire
-            basePriority += hero.GetTraitLevel(DefaultTraits.Honor) * 50f;
-            basePriority += hero.GetTraitLevel(DefaultTraits.Generosity) * 30f;
+            basePriority += hero.GetTraitLevel(DefaultTraits.Honor) * 75f; // Increased from 50f
+            basePriority += hero.GetTraitLevel(DefaultTraits.Generosity) * 50f; // Increased from 30f
 
             // Early days of feast have higher priority
             if (feast.CurrentDay <= 2)
-                basePriority += 200f;
+                basePriority += 400f; // Increased from 200f
             else if (feast.CurrentDay > 5)
-                basePriority -= 100f * (feast.CurrentDay - 5);
+                basePriority -= 150f * (feast.CurrentDay - 5); // Increased penalty
 
             // Urgent conditions override feast attendance
             if (hero.PartyBelongedTo?.Food < hero.PartyBelongedTo?.Party.NumberOfAllMembers)
@@ -165,15 +210,75 @@ namespace TodayWeFeast
             // Ensure minimum threshold
             return Math.Max(0f, basePriority);
         }
+        private float CalculateStayAtFeastScore(Hero hero, FeastObject feast)
+        {
+            // Base score for staying at feast - very high to override other behaviors
+            float stayScore = 2500f;
+
+            // Relationship with host affects desire to stay
+            var relation = hero.GetRelation(feast.Host);
+            stayScore += relation * 10f;
+
+            // Duration affects desire to stay
+            if (feast.CurrentDay <= 3)
+                stayScore += 500f; // Really want to stay early in feast
+            else if (feast.CurrentDay > 7)
+                stayScore -= 200f * (feast.CurrentDay - 7); // Getting tired of feast
+
+            // Personality affects staying
+            stayScore += hero.GetTraitLevel(DefaultTraits.Honor) * 50f;
+            stayScore += hero.GetTraitLevel(DefaultTraits.Generosity) * 30f;
+
+            // Urgent needs can override staying
+            if (hero.PartyBelongedTo?.Food < hero.PartyBelongedTo?.Party.NumberOfAllMembers * 0.5f)
+                stayScore -= 1000f; // Really low on food
+
+            if (hero.Clan.Settlements.Any(s => s.IsUnderSiege))
+                return 0f; // Must leave for siege
+
+            // Random chance to leave after day 5 (natural departure)
+            if (feast.CurrentDay > 5 && MBRandom.RandomFloat < 0.1f) // 10% chance per hour after day 5
+                stayScore -= 500f;
+
+            return Math.Max(500f, stayScore); // Minimum score to stay
+        }
 
         private void OnSettlementEntered(MobileParty party, Settlement settlement, Hero hero)
         {
-            var feast = Feasts.FirstOrDefault(f => f.FeastSettlement == settlement && f.Guests.Contains(hero));
-            if (feast != null && feast.Host != Hero.MainHero && hero != Hero.MainHero)
+            var feast = Feasts.FirstOrDefault(f => f.FeastSettlement == settlement);
+            if (feast != null && hero != null && hero != Hero.MainHero)
             {
-                feast.Host.Clan.Influence += 5;
-                if (feast.Host == Hero.MainHero)
-                    InformationManager.DisplayMessage(new InformationMessage($"{hero.Name} arrived at your feast! (+5 Influence)", Colors.Green));
+                // Check if this hero is an invited guest
+                bool isInvitedGuest = feast.Guests.Contains(hero);
+
+                if (isInvitedGuest)
+                {
+                    // FIXED: Distinguished messages for feast guests vs random visitors
+                    if (feast.Host == Hero.MainHero)
+                    {
+                        // Player is hosting - show arrival messages
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            $"{hero.Name} has arrived for your feast! (+5 Influence)", Colors.Green));
+
+                        feast.Host.Clan.Influence += 5;
+                    }
+                    else if (feast.Guests.Contains(Hero.MainHero))
+                    {
+                        // Player is a guest - show other guest arrivals
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            $"{hero.Name} has arrived for {feast.Host.Name}'s feast.", Colors.Blue));
+                    }
+                }
+                else
+                {
+                    // Not an invited guest - just a regular visitor
+                    // Only show message if player is hosting (so they know it's not a feast guest)
+                    if (feast.Host == Hero.MainHero)
+                    {
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            $"{hero.Name} has arrived at {settlement.Name} (not for the feast).", Colors.Gray));
+                    }
+                }
             }
         }
 
@@ -188,6 +293,7 @@ namespace TodayWeFeast
             Feasts ??= new List<FeastObject>();
             timeSinceLastFeast ??= new Dictionary<Kingdom, double>();
             _lastTalkedToLords ??= new Dictionary<Hero, CampaignTime>();
+            _aiConversationHistory ??= new Dictionary<string, CampaignTime>(); // FIXED
         }
 
         private void OnSessionLaunched(CampaignGameStarter starter)
@@ -249,7 +355,7 @@ namespace TodayWeFeast
         #region Feast Logic
         private bool CanCreateFeast(Kingdom kingdom)
         {
-            if (FactionManager.GetEnemyKingdoms(kingdom).Any()) return false;
+            if (KingdomLogicHelpers.GetEnemyKingdoms(kingdom).Count > 0) return false;
             if (Feasts.Any(f => f.Kingdom == kingdom)) return false;
 
             if (timeSinceLastFeast.TryGetValue(kingdom, out double lastFeast))
@@ -355,40 +461,86 @@ namespace TodayWeFeast
         private void CreateFeast(Hero host, Kingdom kingdom)
         {
             var guests = GetFeastGuests(kingdom, host);
-            if (guests.Count > 2) // Need at least a few guests
+            if (guests.Count > 2)
             {
                 host.ChangeHeroGold(-5000);
-                var feast = new FeastObject(host, kingdom, guests);
+
+                float foodContribution = host == Hero.MainHero ? -1 : CalculateFoodContribution(host);
+                Settlement feastLocation = host == Hero.MainHero ? Hero.MainHero.CurrentSettlement : host.HomeSettlement;
+
+                var feast = new FeastObject(host, kingdom, guests, feastLocation, foodContribution);
                 Feasts.Add(feast);
 
                 timeSinceLastFeast[kingdom] = CampaignTime.Now.ToDays;
 
-                string message = host == Hero.MainHero
-                    ? $"You host a feast at {host.HomeSettlement.Name}!"
-                    : $"{host.Name} hosts a feast at {host.HomeSettlement.Name}!";
-                InformationManager.DisplayMessage(new InformationMessage(message, Colors.Green));
+                if (host == Hero.MainHero)
+                {
+                    // ENHANCED: Show guest list for player feasts
+                    var acceptedGuests = guests.Where(g => g != Hero.MainHero).ToList();
+                    string guestNames = acceptedGuests.Count > 0
+                        ? string.Join(", ", acceptedGuests.Take(3).Select(g => g.Name.ToString()))
+                        : "None yet";
+
+                    if (acceptedGuests.Count > 3)
+                        guestNames += $" and {acceptedGuests.Count - 3} others";
+
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"You host a feast at {feastLocation.Name}! Expected guests: {guestNames}. Use 'Manage feast inventory' to add more food.",
+                        Colors.Green));
+                }
+                else
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"{host.Name} hosts a feast at {feastLocation.Name}!", Colors.Green));
+                }
+            }
+            else
+            {
+                // ADDED: Feedback when too few guests accept
+                if (host == Hero.MainHero)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        "Too few lords accepted your feast invitation. Try improving relations first.", Colors.Red));
+                }
             }
         }
 
         private List<Hero> GetFeastGuests(Kingdom kingdom, Hero host)
         {
-            var potentialGuests = kingdom.Clans
-                .Where(c => !c.IsMinorFaction)
-                .Select(c => c.Leader)
-                .Where(h => h != null && h != Hero.MainHero && h.IsPartyLeader)
-                .ToList();
+            var guestList = new List<Hero>();
 
-            // IMPROVEMENT: Prioritize by strategic value, not just random acceptance
-            var prioritizedGuests = potentialGuests
-                .Where(g => ShouldInviteHero(host, g))
-                .OrderByDescending(g => GetGuestValue(host, g))
-                .Take(Math.Min(12, potentialGuests.Count)) // Cap guest list
-                .ToList();
-
+            // ALWAYS add the player first if they're in this kingdom
             if (Hero.MainHero.MapFaction == kingdom)
-                prioritizedGuests.Insert(0, Hero.MainHero); // Player always first priority
+                guestList.Add(Hero.MainHero);
 
-            return prioritizedGuests;
+            // FIXED: Invite ALL clan leaders in the kingdom
+            foreach (var clan in kingdom.Clans.Where(c => !c.IsMinorFaction))
+            {
+                if (clan.Leader != null &&
+                    clan.Leader != host &&
+                    clan.Leader != Hero.MainHero &&
+                    clan.Leader.IsPartyLeader)
+                {
+                    // Check if they want to join (using existing logic)
+                    if (ShouldInviteHero(host, clan.Leader))
+                    {
+                        guestList.Add(clan.Leader);
+                    }
+                }
+            }
+
+            // Show invitation summary for player-hosted feasts
+            if (host == Hero.MainHero)
+            {
+                int totalClanLeaders = kingdom.Clans.Count(c => !c.IsMinorFaction && c.Leader != null && c.Leader != host);
+                int acceptedInvitations = guestList.Count - 1; // Subtract player
+
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"Invited {totalClanLeaders} clan leaders: {acceptedInvitations} accepted, {totalClanLeaders - acceptedInvitations} declined.",
+                    Colors.Yellow));
+            }
+
+            return guestList;
         }
 
         private float GetGuestValue(Hero host, Hero guest)
@@ -441,7 +593,21 @@ namespace TodayWeFeast
         public bool CanTalkForRelation(Hero hero)
         {
             if (!_lastTalkedToLords.TryGetValue(hero, out var lastTalk)) return true;
-            return (CampaignTime.Now.ToDays - lastTalk.ToDays) >= 3;
+
+            // FIXED: During feasts, reduce cooldown to 2 days instead of 3
+            var currentFeast = Feasts.FirstOrDefault(f => f.FeastSettlement == Hero.MainHero.CurrentSettlement);
+
+            float cooldownDays;
+            if (currentFeast != null && (currentFeast.Host == Hero.MainHero || currentFeast.Guests.Contains(Hero.MainHero)))
+            {
+                cooldownDays = 2f; // 2-day conversations during feasts
+            }
+            else
+            {
+                cooldownDays = 3f; // Normal 3-day cooldown outside feasts
+            }
+
+            return (CampaignTime.Now.ToDays - lastTalk.ToDays) >= cooldownDays;
         }
 
         private void ApplyConversationBonus(Hero hero, int relationBonus)
@@ -449,7 +615,15 @@ namespace TodayWeFeast
             ChangeRelationAction.ApplyPlayerRelation(hero, relationBonus, true, true);
             Hero.MainHero.Clan.AddRenown(1, true);
             _lastTalkedToLords[hero] = CampaignTime.Now;
-            InformationManager.DisplayMessage(new InformationMessage($"Pleasant conversation with {hero.Name}! (+{relationBonus} Relation, +1 Renown)", Colors.Green));
+
+            // Updated feedback message
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"Meaningful conversation with {hero.Name}! (+{relationBonus} Relation, +1 Renown). Next relation bonus in 2 days.", Colors.Green));
+        }
+
+        public float CalculateFoodContribution(Hero hero)
+        {
+            return hero.PartyBelongedTo?.Food * 0.8f ?? 0f;
         }
         #endregion
 
@@ -476,11 +650,15 @@ namespace TodayWeFeast
                     _tavernTrack?.Play();
                 }
 
+                // BACK TO SIMPLE: Just try basic volume parameter
                 var musicId = SoundEvent.GetEventIdFromString("event:/music/musicians/vlandia/01");
                 if (musicId != -1)
                 {
                     _musicianTrack = SoundEvent.CreateEvent(musicId, scene);
-                    _musicianTrack?.Play();
+                    if (_musicianTrack != null)
+                    {
+                        _musicianTrack.Play();
+                    }
                 }
             }
         }
@@ -513,41 +691,167 @@ namespace TodayWeFeast
                 CanEndFeast, EndFeast, false, 6);
         }
 
-        private bool CanHostFeast(MenuCallbackArgs args) =>
-            Hero.MainHero.MapFaction is Kingdom &&
-            Hero.MainHero.CurrentSettlement?.Owner == Hero.MainHero &&
-            !Feasts.Any(f => f.Kingdom == Hero.MainHero.MapFaction);
+        private bool CanHostFeast(MenuCallbackArgs args)
+        {
+            args.optionLeaveType = GameMenuOption.LeaveType.Leave;
 
-        private bool CanManageFeast(MenuCallbackArgs args) =>
-            Feasts.Any(f => f.FeastSettlement == Settlement.CurrentSettlement && f.Host == Hero.MainHero);
+            // Don't show option if already hosting a feast at this location
+            if (Feasts.Any(f => f.FeastSettlement == Hero.MainHero.CurrentSettlement))
+                return false;
 
-        private bool CanEndFeast(MenuCallbackArgs args) => CanManageFeast(args);
+            return Hero.MainHero.MapFaction is Kingdom &&
+                   Hero.MainHero.CurrentSettlement?.Owner == Hero.MainHero &&
+                   KingdomLogicHelpers.GetEnemyKingdoms(Hero.MainHero.Clan.Kingdom).Count < 1 &&
+                   !Feasts.Any(f => f.Kingdom == Hero.MainHero.MapFaction);
+        }
+
+        private bool CanManageFeast(MenuCallbackArgs args)
+        {
+            args.optionLeaveType = GameMenuOption.LeaveType.Manage;
+
+            // ALWAYS show the menu option, handle the error in the consequence method
+            return true;
+        }
+
+        private bool CanEndFeast(MenuCallbackArgs args)
+        {
+            args.optionLeaveType = GameMenuOption.LeaveType.Leave;
+
+            // Show only if player is actually hosting a feast here
+            return Feasts.Any(f => f.FeastSettlement == Settlement.CurrentSettlement && f.Host == Hero.MainHero);
+        }
 
         private void HostFeast(MenuCallbackArgs args)
         {
-            if (Hero.MainHero.Clan.Kingdom.Stances.Any(s => s.IsAtWar))
+            // ENHANCED: Check for existing feast at current settlement first
+            var existingFeastAtLocation = Feasts.FirstOrDefault(f => f.FeastSettlement == Hero.MainHero.CurrentSettlement);
+            if (existingFeastAtLocation != null)
+            {
+                if (existingFeastAtLocation.Host == Hero.MainHero)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage("You are already hosting a feast at this location.", Colors.Red));
+                }
+                else
+                {
+                    InformationManager.DisplayMessage(new InformationMessage($"{existingFeastAtLocation.Host.Name} is already hosting a feast here.", Colors.Red));
+                }
+                return;
+            }
+
+            // Check for existing feast in kingdom
+            var existingKingdomFeast = Feasts.FirstOrDefault(f => f.Kingdom == Hero.MainHero.MapFaction);
+            if (existingKingdomFeast != null)
+            {
+                InformationManager.DisplayMessage(new InformationMessage($"Your kingdom already has an active feast at {existingKingdomFeast.FeastSettlement.Name}.", Colors.Red));
+                return;
+            }
+
+            if (Hero.MainHero.Clan.Kingdom != null && KingdomLogicHelpers.GetEnemyKingdoms(Hero.MainHero.Clan.Kingdom).Count > 0)
+            {
                 InformationManager.DisplayMessage(new InformationMessage("Cannot host feast during war.", Colors.Red));
-            else if (!CanCreateFeast(Hero.MainHero.Clan.Kingdom))
-                InformationManager.DisplayMessage(new InformationMessage("Must wait 15 days between feasts.", Colors.Red));
-            else if (Hero.MainHero.Spouse == null)
+                return;
+            }
+
+            if (!CanCreateFeast(Hero.MainHero.Clan.Kingdom))
+            {
+                double lastFeastTime = CampaignTime.Now.ToDays - 15;
+                if (timeSinceLastFeast.TryGetValue(Hero.MainHero.Clan.Kingdom, out double actualLastFeast))
+                {
+                    lastFeastTime = actualLastFeast;
+                }
+
+                var daysToWait = 15 - (CampaignTime.Now.ToDays - lastFeastTime);
+                InformationManager.DisplayMessage(new InformationMessage($"Must wait {daysToWait:F0} more days between feasts.", Colors.Red));
+                return;
+            }
+
+            if (Hero.MainHero.Spouse == null)
+            {
                 InformationManager.DisplayMessage(new InformationMessage("Must be married to host a feast.", Colors.Red));
-            else if (Hero.MainHero.Gold < 5000)
+                return;
+            }
+
+            if (Hero.MainHero.Gold < 5000)
+            {
                 InformationManager.DisplayMessage(new InformationMessage("Need 5000 gold to host a feast.", Colors.Red));
-            else
-                CreateFeast(Hero.MainHero, Hero.MainHero.Clan.Kingdom);
+                return;
+            }
+
+            if (Hero.MainHero.PartyBelongedTo.Food < 5)
+            {
+                InformationManager.DisplayMessage(new InformationMessage("You need at least 5 food in your party to start a feast. Gather more food first.", Colors.Red));
+                return;
+            }
+
+            // Clear timing restriction when creating feast
+            if (timeSinceLastFeast.ContainsKey(Hero.MainHero.Clan.Kingdom))
+                timeSinceLastFeast.Remove(Hero.MainHero.Clan.Kingdom);
+
+            CreateFeast(Hero.MainHero, Hero.MainHero.Clan.Kingdom);
         }
 
+        // FIXED: This is the key method that was broken
         private void ManageFeast(MenuCallbackArgs args)
         {
+            // Check if player is hosting a feast at current settlement
             var feast = Feasts.FirstOrDefault(f => f.Host == Hero.MainHero && f.FeastSettlement == Settlement.CurrentSettlement);
-            if (feast?.FeastRoster != null)
-                InventoryManager.OpenScreenAsStash(feast.FeastRoster);
+
+            if (feast?.FeastRoster == null)
+            {
+                // FIXED: Show error message when no feast is being hosted
+                InformationManager.DisplayMessage(new InformationMessage(
+                    "You are not hosting a feast at this location.", Colors.Red));
+                return;
+            }
+
+            // Store the food amount before opening inventory
+            float foodBefore = feast.FoodAmount;
+
+            // CRITICAL: This opens the feast inventory as a stash where player can contribute food
+            InventoryManager.OpenScreenAsStash(feast.FeastRoster);
+
+            // After inventory screen closes, recalculate food amounts
+            feast.RecalculateFoodFromRoster();
+
+            // Notify player of changes
+            float foodAfter = feast.FoodAmount;
+            if (foodAfter != foodBefore)
+            {
+                float difference = foodAfter - foodBefore;
+                if (difference > 0)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"Added {difference:F0} food to the feast! Total: {foodAfter:F0} food for {feast.Guests.Count} guests.", Colors.Green));
+                }
+                else
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"Removed {Math.Abs(difference):F0} food from the feast. Remaining: {foodAfter:F0} food.", Colors.Yellow));
+                }
+
+                // Update feast quality message
+                feast.ShowUpdatedFeastQuality();
+            }
+            else
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"Feast inventory: {feast.FoodAmount:F0} food for {feast.Guests.Count} guests.", Colors.Blue));
+            }
         }
 
         private void EndFeast(MenuCallbackArgs args)
         {
             var feast = Feasts.FirstOrDefault(f => f.FeastSettlement == Settlement.CurrentSettlement && f.Host == Hero.MainHero);
-            feast?.EndFeast("Host ended the feast.");
+
+            if (feast == null)
+            {
+                InformationManager.DisplayMessage(new InformationMessage("You are not hosting a feast at this location.", Colors.Red));
+                return;
+            }
+
+            // Show confirmation message
+            InformationManager.DisplayMessage(new InformationMessage($"You end the feast at {feast.FeastSettlement.Name}.", Colors.Yellow));
+            feast.EndFeast("Host ended the feast.");
         }
 
         private void AddDialogs(CampaignGameStarter starter)

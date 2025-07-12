@@ -1,8 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using HarmonyLib;
 
 using Helpers;
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.MapEvents;
@@ -16,6 +18,14 @@ using MathF = TaleWorlds.Library.MathF;
 
 namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
 {
+    [HarmonyPatch(typeof(AiMilitaryBehavior), "RegisterEvents")]
+    public class Patch_DisableAiMilitaryBehavior
+    {
+        public static bool Prefix()
+        {
+            return false;
+        }
+    }
     // Token: 0x02000404 RID: 1028
     public class EnhancedAiMilitaryBehavior : CampaignBehaviorBase
     {
@@ -427,7 +437,7 @@ namespace TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors
                 IFaction mapFaction = mobileParty.MapFaction;
                 Kingdom kingdom = (Kingdom) mapFaction;
                 int count = ((Kingdom) mapFaction).Armies.Count;
-                int num15 = 50 + count * count * 20 + mobileParty.LeaderHero.RandomInt(20) + traitLevel * 20;
+                int num15 = 30 + count * 10 + traitLevel * 10; // Lower base, lower multipliers
                 float num16 = 1f - (float) count * 0.2f;
                 bool flag2;
                 if (mobileParty.LeaderHero.Clan.Influence > (float) num15 && mobileParty.MapFaction.IsKingdomFaction && !mobileParty.LeaderHero.Clan.IsUnderMercenaryService)

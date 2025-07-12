@@ -29,12 +29,6 @@ namespace Diplomacy.War_Peace_AI_Overhaul
 {
     internal class Patches
     {
-        [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomWarDecision")]
-        public class Patch_DisableRandomWar { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
-
-        [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomPeaceDecision")]
-        public class Patch_DisableRandomPeace { private static bool Prefix(ref KingdomDecision __result) { __result = null; return false; } }
-
         [HarmonyPatch(typeof(KingdomDiplomacyVM), "OnDeclarePeace")]
         public class KingdomPlayerPeacePatch
         {
@@ -115,59 +109,6 @@ namespace Diplomacy.War_Peace_AI_Overhaul
                 {
                     __result = (int) (__result * 0.5f); // Reduce garrison wages by 50%
                 }
-            }
-        }
-        [HarmonyPatch(typeof(AiMilitaryBehavior), "RegisterEvents")]
-        public class Patch_DisableAiMilitaryBehavior
-        {
-            public static bool Prefix()
-            {
-                return false;
-            }
-        }
-        [HarmonyPatch(typeof(KingdomDiplomacyVM), "OnDeclarePeace")]
-        public class OnDeclarePeace
-        {
-            public static bool Prefix(KingdomWarItemVM item)
-            {
-                var playerKingdom = Hero.MainHero.Clan.Kingdom;
-                var targetKingdom = item.Faction2 as Kingdom;
-                if (playerKingdom == null || targetKingdom == null)
-                    return false;
-
-                // Only allow peace if the AI is willing (optional, can be removed if not needed)
-                var controller = Campaign.Current.GetCampaignBehavior<KingdomLogicController>();
-                float stance = controller?.GetKingdomStance(targetKingdom, playerKingdom) ?? 50f;
-
-                // Use the stance threshold for peace (lower stance = more willing for peace)
-                if (stance > KingdomStrategy.PEACE_THRESHOLD)
-                {
-                    InformationManager.DisplayMessage(new InformationMessage($"{targetKingdom.Name} is not interested in peace at this time.", Colors.Red));
-                    return false;
-                }
-
-                // Calculate daily tribute (from player to AI)
-                int dailyTribute = Diplomacy.War_Peace_AI_Overhaul.StrategicAIModules.StrategicAI.KingdomLogicHelpers.GetPeaceTribute(
-                    playerKingdom.Leader.Clan,
-                    targetKingdom.Leader.Clan,
-                    playerKingdom,
-                    targetKingdom
-                );
-
-                // Apply peace with tribute
-                MakePeaceAction.Apply(playerKingdom, targetKingdom, dailyTribute);
-
-                // Show result to player
-                string tributeText = dailyTribute > 0
-                    ? $"You will pay {dailyTribute} gold per day in tribute."
-                    : dailyTribute < 0
-                        ? $"You will receive {Math.Abs(dailyTribute)} gold per day in tribute."
-                        : "No tribute will be paid.";
-                InformationManager.DisplayMessage(new InformationMessage(
-                    $"You declared peace with {targetKingdom.Name}. {tributeText}"
-                ));
-
-                return false; // Skip original method
             }
         }
 
